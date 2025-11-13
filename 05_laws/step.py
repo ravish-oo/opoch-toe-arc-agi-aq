@@ -1,21 +1,33 @@
 """
 05_laws: WHAT — derive atom types and mine invariants from train_out.
 
+Stage: laws
 Promotes "always true" facts into linear constraints (fixes, equalities, forbids).
 """
 
+from typing import Any
+import logging
 
-def mine(canonical, scaffold_train_out, out_size, trace: bool = False):
+
+def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> Any:
     """
-    Mine invariants from train_out: type→color fixes + relational equalities.
+    Stage: laws (N)
+
+    Anchor:
+      - 01_STAGES.md: laws
+      - 00_MATH_SPEC.md §5: Stage N — Invariants as linear constraints
+      - 02_QUANTUM_MAPPING.md: WHAT = law nucleus over scaffold
 
     Input:
-        canonical: output from 02_truth.step.canonicalize
-        scaffold_train_out: output from 03_scaffold.step.build
-        out_size: (H_out, W_out) from 04_size_choice.step.choose
-        trace: enable debug receipts
+      canonical: from 02_truth.canonicalize
+      scaffold: from 03_scaffold.build
+      out_size: (H_out, W_out) from 04_size_choice.choose
+      trace: enable debug logging if True.
 
     Output:
-        invariants object (fixed, forbids, equal_pairs, etc.)
+      Invariants object encoding fixes, equalities, forbids, etc.
+      For now, this function is not implemented and always raises.
     """
-    raise NotImplementedError("05_laws/step.py:mine() — WO-4.*/5.* not yet implemented")
+    if trace:
+        logging.info("[laws] mine() called")
+    raise NotImplementedError("05_laws.mine is not implemented yet.")

@@ -1,20 +1,32 @@
 """
 07_fixed_point: N² = N — idempotence check.
 
+Stage: fixed_point
 Re-runs pipeline with (test_in, test_out) appended to verify law closure.
 """
 
+from typing import Any
+import logging
 
-def check(canonical, solution, trace: bool = False):
+
+def check(canonical: Any, solution: Any, trace: bool = False) -> None:
     """
-    Verify idempotence: re-run with test output appended should yield identical result.
+    Stage: fixed_point (N² = N)
+
+    Anchor:
+      - 01_STAGES.md: fixed_point
+      - 00_MATH_SPEC.md §7: Idempotence (N² = N)
+      - 02_QUANTUM_MAPPING.md: re-see; output must be stable
 
     Input:
-        canonical: output from 02_truth.step.canonicalize
-        solution: output from 06_minimal_act.step.solve
-        trace: enable debug receipts
+      canonical: from 02_truth.canonicalize
+      solution: from 06_minimal_act.solve (must contain out_grid when implemented)
+      trace: enable debug logging if True.
 
     Output:
-        None (raises on mismatch)
+      None. In final implementation, this will re-run pipeline with test pair added
+      and assert stability. For now, it is not implemented and always raises.
     """
-    raise NotImplementedError("07_fixed_point/step.py:check() — WO-7.1 not yet implemented")
+    if trace:
+        logging.info("[fixed_point] check() called")
+    raise NotImplementedError("07_fixed_point.check is not implemented yet.")

@@ -1,0 +1,61 @@
+{
+    "task_id": "00576224",
+    "per_output": [
+        {
+            "H": 6,
+            "W": 6,
+            "frame_count": 0,
+            "inner_count": 16,
+            "d_top": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            },
+            "d_left": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            },
+            "d_right": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            }
+        },
+        {
+            "H": 6,
+            "W": 6,
+            "frame_count": 0,
+            "inner_count": 16,
+            "d_top": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            },
+            "d_left": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            },
+            "d_right": {
+                "min": 0,
+                "max": 5,
+                "sum": 90
+            }
+        }
+    ],
+    "global": {
+        "has_midrow": false,
+        "has_midcol": false
+    }
+}

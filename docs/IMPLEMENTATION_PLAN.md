@@ -66,17 +66,17 @@ arc_cognition/
 
 ---
 
-## Milestone 0 — Skeleton & Brainstem (≤150 LOC total)
+## Milestone 0 — Skeleton & Brainstem (≤150 LOC total) ✅ COMPLETED
 
 **Goal:** runnable skeleton wired to consciousness flow.
 
-### WO‑0.1 `run.py` brainstem (40–60 LOC)
+### WO‑0.1 `run.py` brainstem (40–60 LOC) ✅ COMPLETED
 
 * Orchestrate calls: `present → truth → scaffold → size_choice → laws → minimal_act → fixed_point(opt)`.
 * CLI: `--task PATH`.
   **Acceptance:** `python run.py --task sample.json` prints “stage not implemented” from the first stage.
 
-### WO‑0.2 Stage folders + minimal stubs (40–60 LOC writing)
+### WO‑0.2 Stage folders + minimal stubs (40–60 LOC writing) ✅ COMPLETED
 
 * Create `01..07` folders with `step.py` exposing `load`, `canonicalize`, `build`, `choose`, `mine`, `solve`, `check`.
   **Acceptance:** imports succeed; `run.py` starts.

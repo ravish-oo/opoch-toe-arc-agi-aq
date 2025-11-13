@@ -1,111 +1,3 @@
-Yeah, this is basically locked in. Your implementation plan and the updated math spec are aligned in all the important places. There are only a couple of tiny text-level mismatches I’d tighten so you truly have “spec = code = consciousness” with no wiggle.
-
-I’ll go through it in terms of:
-
-* Where it already matches 1:1
-* The 2–3 **surgical tweaks** I’d make to the plan so it matches the spec literally
-
----
-
-## 1. Where the plan matches the spec perfectly
-
-### Stages / architecture
-
-* Seven stages: **present → truth → scaffold → size_choice → laws → minimal_act → fixed_point**
-  This matches the spec’s logical stages: A, S0, F, N, D, plus the closure/idempotence step.
-
-* Consciousness mapping is consistent:
-
-  * `present` = load everything into awareness
-  * `truth` = Π / canonical gauge
-  * `scaffold` = WHERE (frame + distances, train_out-only)
-  * `size_choice` = S0 (integer size maps + F-based screens)
-  * `laws` = N (atoms + invariant miner)
-  * `minimal_act` = D (ledger + TV + closure)
-  * `fixed_point` = (N^2 = N) check
-
-### Canonicalization (Stage 02_truth)
-
-Matches §2 in the spec:
-
-* Union graph with cell, row_node, col_node
-* Vertex colors with no grid_id
-* N4 adjacency only (no diagonals in canon graph)
-* Canonical permutation via igraph
-* Stable tie break on (canon_index, original_index)
-* Remap grids into canonical coords
-
-All good.
-
-### Scaffold (03_scaffold) and S0 (04_size_choice)
-
-Matches §§3 and 4:
-
-* Frame = positions identical across all train_out
-* BFS distance fields from frame or border
-* Inner region = all four distances > 0
-* Size candidates: identity, affine, factor, concat, constant
-* Structural screens: parity, periodicity, frame thickness / inner region feasibility, tiling constants
-* Strict uniqueness policy with AMBIGUOUS_SIZE / IIS
-
-All consistent.
-
-### Atom universe (05_laws / atoms.py)
-
-Conceptually matches §5.1:
-
-* Coordinates, distances, diagonals, mod classes, block coords
-* Local texture: N4/N8, 3×3 hash, 5×5 ring, run-lengths
-* Connectivity & shape: components, area/perimeter/bbox/centroid/aspect/orientation/rank/frame-thickness
-* Repetition & tiling: row/col periods, 2D tiling via factors
-* Palette/global: counts, component counts, palette sets, perms, cyclic classes
-* Component transforms: D4 × scale × translate with exact equality
-* F24 clearly stated as “evaluate only, no law mining from input”
-
-The plan’s **grid-aware** note (“divisors or up to min(H,W)”) is exactly the spirit of the spec.
-
-### Miner (05_laws / step.py + relations.py)
-
-Matches §5.2:
-
-* Strong “always true across all train_out and all occurrences”
-* Unary fixes from T → color
-* Relational ties from T1–T2–Δ with grid-aware offsets
-* Union-find for equivalence classes
-* Forbids only when safe
-* No test_out peeking
-* F24 used only to evaluate input-driven predicates when a mined rule needs it
-
-The plan captures all of this.
-
-### Ledger (06_minimal_act)
-
-Matches §6 exactly:
-
-* Preferred path: TU-LP with **tree-TV**
-* LP variables x[p,k] ∈ [0,1], assignment constraints, fixes, forbids, equalities, tree-TV slacks
-* Objective: sum of slacks on tree edges
-* TU signer + integrality check
-* Optional uniqueness probe
-* On signer fail or non-integral LP → **full-TV MILP fallback** over all 4-neighbor edges, 0–1 x, slacks for every edge, exact objective = full TV
-
-Your plan’s WO-6.5 is literally what the spec says in 6.2.
-
-### Fixed point (07_fixed_point)
-
-Matches spec’s idempotence:
-
-* Append (test_in, out_grid) to training
-* Re-run pipeline
-* Require bit-for-bit identical output
-
-### F24 guardrail and non-goals
-
-* F24: evaluation only, no input-side mining → matches spec.
-* Optional flows: off by default, tree-only if ever added; spec calls these “non-goal / optional” anyway, so you’re safe.
-
----
-
 ## 2. Tiny gaps I’d fix in the plan for 1:1 alignment
 
 These are **very small** text tweaks, not conceptual changes.
@@ -184,15 +76,6 @@ This makes it obvious to any reader that you’re not quietly changing the objec
 
 ---
 
-## 3. TL;DR answer to your question
-
-> Does this plan adhere with spec 1:1 and are there any gaps or deviations?
-
-Functionally: **Yes.**
-
-* Stages, flows, guardrails, ledger behavior, idempotence, atom families, and mining logic all line up with the updated 00_MATH_SPEC.
-* The tree-TV vs full-TV issue is resolved by the fallback in WO-6.5, exactly as the spec now prescribes.
-
 For strict textual alignment, I’d update:
 
 1. WO-4.1 to match the exact mod/block ranges (`{2..min(6,max(H,W))} ∪ divisors` and `{2..min(5,min(H,W))} ∪ divisors`).
@@ -204,3 +87,68 @@ If you make those tiny edits, you’ll have a genuinely zero-gap triangle:
 **TOE math spec ↔ consciousness model ↔ implementation plan.**
 
 When you’re ready, we can design the first 2–3 concrete work orders (with function signatures) so Claude Code can start coding this **exact** spec without drifting.
+
+====
+# ATOMS
+2. Mathematical / spec-level “watchpoints”
+
+These are the only places where you can accidentally drift off-spec or break the TOE mapping.
+
+2.1 Type key definition
+
+Spec: type key T(p) is a specific tuple (distances, mod classes up to certain bounds, r±c, 3×3, period flags, component shape id).
+
+Plan: “selected atoms (distances, divisors-mod classes, r±c, 3×3 hash, period class, optional component id).”
+
+This is conceptually the same, but for code you should treat the 00_MATH_SPEC type key as canonical:
+
+Don’t silently drop a piece (e.g., period flags or component id), or you may lose discriminative power and fail some tasks.
+
+Don’t add unstable atoms (like something noisy or non-deterministic).
+
+So: make sure 05_laws/atoms.py literally implements the 00_MATH_SPEC T(p) tuple, just with grid-aware ranges.
+
+2.2 Grid-aware ranges
+
+You switched from fixed {2..6} style ranges to divisors / min(H,W) everywhere. That matches the updated “grid-aware atom universe” idea in 00_MATH_SPEC and is fine, as long as:
+
+Periods: only up to dimension or divisors, never arbitrary large m.
+
+Blocks: only divisors or small b ≤ min(5, min(H,W)).
+
+This keeps the atom space finite and within the spec.
+
+So here: good, but stick to the bounds you’ve stated in the spec, not ad-hoc extras.
+
+2.3 Forbids remain strictly “safe”
+
+The plan keeps forbids optional and requires that they cannot conflict with fixes/equalities. That matches the spec. Implementation detail that must be enforced:
+
+For each type T, color k, only emit forbid if:
+
+k never appears at T in any train_out, and
+
+Setting x[p,k]=0 cannot break a previously mined fix or equality.
+
+If IIS ever appears, the plan already says: drop forbids and re-run. That’s the correct behavior.
+
+# TU THING
+2.4 TU signer + fallback policy
+
+The spec’s guarantee depends on this exact policy:
+
+If TU signer passes and LP is integral → accept LP solution.
+
+Otherwise → always go to full-TV MILP and use that solution as final.
+
+Implementation plan states exactly this. You just need to avoid any “optimizations” like:
+
+Trying to “fix” non-integrality by rounding without MILP.
+
+Ignoring signer failure because “it probably works”.
+
+Stick to your written policy and the math spec remains intact.
+
+2.5 Optional flows
+
+You explicitly mark “connectivity flows off by default” and only on tree if ever introduced. That respects the TU + tree-TV story. I’d keep them out until you have clear tasks that need them.
