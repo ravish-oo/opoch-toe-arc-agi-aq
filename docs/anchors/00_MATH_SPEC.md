@@ -1,332 +1,382 @@
-0.⁠ ⁠Ground truth (TOE)
+# 00_MATH_SPEC.md
+
+## 0. Ground truth (TOE)
 
 We take as absolute truth:
-	•	Π (truth closure): a cleanup map with \Pi^2 = \Pi. It removes minted/artificial differences (renamings, coordinate choices).
-	•	A0 — No minted differences: truth = fixed points of Π.
-	•	A1 — Exact balance (Fenchel–Young): every paid change has a dual cost; no free gain around loops; “real actions” pay ledger cost.
-	•	A2 — Gluing: all price resides on interfaces (faces); on grids, that’s cost for color differences across adjacencies.
 
-From this, for an ARC task:
+* **Π (truth closure):** a cleanup map with (\Pi^2 = \Pi). It removes minted/artificial differences (renamings, coordinate choices).
+* **A0 — No minted differences:** truth = fixed points of Π.
+* **A1 — Exact balance (Fenchel–Young):** every paid change has a dual cost; no free gain around loops; “real actions” pay ledger cost.
+* **A2 — Gluing:** all price resides on interfaces (faces); on grids, that’s cost for color differences across adjacencies.
 
-The “law” is a closure operator N on grids such that:
-	•	N(X^{(i)}{\rm in}) = X^{(i)}{\rm out} for all training pairs,
-	•	N^2 = N,
-	•	Among all such closures, N minimizes interface cost (A1/A2) on all grids it acts on.
+For an ARC task, the **law** is a closure (N) on grids such that:
+
+* (N(X^{(i)}*{\rm in}) = X^{(i)}*{\rm out}) for all training pairs,
+* (N^2 = N),
+* Among all such closures consistent with training invariants, (N) minimizes **interface cost** (A1/A2).
 
 The test output is:
+[
+X^{\text{test}}*{\rm out} ;=; N\big(X^{\text{test}}*{\rm in}\big).
+]
 
-X^{\text{test}}{\rm out} = N(X^{\text{test}}{\rm in}).
+---
 
-Our entire spec is just a finite way of computing that.
+## 1. Representing the task
 
-⸻
+Given training pairs (\mathcal D = {(X^{(i)}*{\rm in}, X^{(i)}*{\rm out})}*{i=1}^T) and the test input (X^{\text{test}}*{\rm in}).
 
-1.⁠ ⁠Representing the task
+Each grid (X):
 
-Given:
-	•	Training pairs \mathcal D = \{(X^{(i)}{\rm in}, X^{(i)}{\rm out})\}_{i=1}^T,
-	•	Test input X^{\text{test}}_{\rm in}.
+* height (H_X), width (W_X),
+* cells (U_X = {(r,c): 0\le r < H_X,; 0\le c < W_X}),
+* colors (c_X:U_X \to \mathcal C \subseteq{0,\dots,9}).
 
-Each grid X:
-	•	height H_X, width W_X,
-	•	cells U_X = \{(r,c): 0\le r < H_X, 0\le c < W_X\},
-	•	colors c_X:U_X \to \mathcal C \subseteq\{0,\dots,9\}.
+---
 
-We want X^{\text{test}}_{\rm out}.
+## 2. Stage A — Canonical labeling (awareness & gauge)
 
-⸻
+We remove minted coordinate choices so all grids live in a common, relational gauge.
 
-2.⁠ ⁠Stage A — Canonical labeling (awareness & gauge)
+### 2.1 Disjoint‑union graph (G)
 
-We remove arbitrary coordinate choices so all grids live in a common, relational coordinate system.
+Per grid (X):
 
-2.1 Build disjoint union graph G
+* **Vertices:** cell (v_{r,c}), row node (v^{\rm row}_r), col node (v^{\rm col}_c).
+* **Vertex colors** (no grid id; no absolute indices):
+  [
+  \text{vcolor}(v)=
+  \begin{cases}
+  (\text{“cell”},,c_X(r,c)) & v=v_{r,c}\
+  (\text{“row_node”},,100) & v=v^{\rm row}_r\
+  (\text{“col_node”},,101) & v=v^{\rm col}_c
+  \end{cases}
+  ]
+* **Edges:** 4‑neighbor cell adjacencies (N4 only; no diagonals in canon graph); and cell↔row, cell↔col incidence edges.
+* No edges between different grids (components are disjoint).
 
-Create a graph G=(V,E) with one connected component per grid (each training input, training output, and the test input).
+### 2.2 Canonical labeling
 
-For each grid X:
-	•	Vertices:
-	•	Cell node v_{r,c} for each cell (r,c)\in U_X,
-	•	Row node v^{\rm row}_r for each row index r,
-	•	Col node v^{\rm col}_c for each column index c.
-	•	Vertex colors (no grid id, no absolute indices):
-\text{vcolor}(v)=
-\begin{cases}
-(\text{“cell”},\,c_X(r,c)) & \text{if } v=v_{r,c}\\
-(\text{“row\_node”},\,100) & \text{if } v=v^{\rm row}_r\\
-(\text{“col\_node”},\,101) & \text{if } v=v^{\rm col}_c
-\end{cases}
-	•	Edges:
-	•	For each 4-neighbor pair (r,c)\sim(r’,c’): edge v_{r,c} - v_{r’,c’} (color "adj"),
-	•	For each cell v_{r,c}:
-	•	edge v_{r,c} - v^{\rm row}_r (color "row_edge"),
-	•	edge v_{r,c} - v^{\rm col}_c (color "col_edge").
+Run a canonical labeling (e.g., igraph/Traces) to get a canonical permutation (\pi). Use a **stable tie‑break** for row/col gadgets:
 
-There are no edges between different grids, so components are disjoint.
+1. Apply canonical permutation to all vertices.
+2. For row_node and col_node gadgets, sort by ((\text{canon_index}, \text{original_index})).
+3. Store the resulting (\mathbf{R}_X(r)) and (\mathbf{C}_X(c)) arrays as the canonical row/col orders.
 
-2.2 Canonical labeling
+### 2.3 Canonical local coordinates
 
-Call a canonical labeling algorithm (e.g. nauty/bliss):
+For each grid (X):
 
-\pi:V\to\{0,\dots,|V|-1\}
+* Canonical row order (R_X(r)\in{0,\dots,H_X-1}),
+* Canonical col order (C_X(c)\in{0,\dots,W_X-1}),
+* Canonical cell coords (\rho_X(r,c)=R_X(r)), (\kappa_X(r,c)=C_X(c)).
 
-It returns:
-	•	A canonical index \pi(v) for each vertex v,
-	•	Optionally, automorphism orbits, but we only need the indices.
+Re‑running yields identical canonical arrays.
 
-2.3 Canonical local coordinates
+**Receipt A:** Canonical maps (\mathbf{R}_X), (\mathbf{C}_X); orbit partition; canonicalization library/version flags.
 
-For each grid X:
-	•	Canonical row order: sort row nodes v^{\rm row}_r by \pi; define R_X(r)\in\{0,\dots,H_X-1\} as their rank,
-	•	Canonical col order: sort col nodes v^{\rm col}_c by \pi; define C_X(c)\in\{0,\dots,W_X-1\},
-	•	Canonical coordinate of cell (r,c):
-\rho_X(r,c)=R_X(r),\quad \kappa_X(r,c)=C_X(c).
+---
 
-From here on, we treat grids in these canonical coordinates. If two grids are identical up to permutations, rotations, etc., they now have the same canonical representation.
+## 3. Stage S0 — Output canvas size
 
-Receipt A: canonical indices, row/col maps R_X,C_X. Re-running gives the same.
+Determine ((H^{\text{test}}*{\rm out},W^{\text{test}}*{\rm out})) from training size pairs and structural screening **using only Stage F facts from train_out**.
 
-⸻
+### 3.1 Candidate size maps
 
-3.⁠ ⁠Stage S0 — Output canvas size
+Collect integer relations that fit **all** training pairs:
 
-We must determine the test output size (H^{\text{test}}{\rm out},W^{\text{test}}{\rm out}) from training sizes and structural hints, with no arbitrary choices.
+* identity/swap,
+* integer affine (\begin{bmatrix}H'\W'\end{bmatrix}=M\begin{bmatrix}H\W\end{bmatrix}+b),
+* factor maps (H'=r_H H,; W'=r_W W),
+* tiling/concat (H'=n_v H + \delta_H,; W'=n_h W + \delta_W),
+* constant (H',W') (if train_out sizes coincide).
 
-3.1 Size candidates from pairs
+### 3.2 Structural disambiguation (train_out‑only)
 
-From training pairs:
+Screen candidates for the test size using only F‑facts from train_out. Each candidate ((H', W')) must pass:
 
-(H^{(i)}{\rm in},W^{(i)}{\rm in}) \to (H^{(i)}{\rm out},W^{(i)}{\rm out}),
+1. **Feasibility:** For every training output's learned frame thickness (t) and inner region ((h_{\text{inner}}, w_{\text{inner}})):
+   [
+   H' \ge h_{\text{inner}} + 2t, \quad W' \ge w_{\text{inner}} + 2t.
+   ]
+2. **Parity:** If all train_out have a midrow ((\exists r: d_{\text{top}}(r) = d_{\text{bottom}}(r))) then (H') must be odd; similarly for (W') and midcol.
+3. **Periodicity:** If train_out rows (or cols) have least period (p) everywhere inside the inner region, then (p \mid H') (resp. (p \mid W')).
+4. **Tiling constants:** For maps (H' = n_v H + \delta_H, W' = n_h W + \delta_W), require the same integers ((n_v, n_h, \delta_H, \delta_W)) fit all trainings. If frame thickness (t) is detected, enforce (\delta_H, \delta_W \in \{0, 2t\}) only.
 
-collect all exact integer relations between input and output sizes:
-	•	affine:
-\begin{bmatrix}H^{(i)}{\rm out}\\W^{(i)}{\rm out}\end{bmatrix}
-= M\begin{bmatrix}H^{(i)}{\rm in}\\W^{(i)}{\rm in}\end{bmatrix} + b,
-	•	factor maps,
-	•	simple tilings.
+Policy:
 
-We get a finite set of candidate mappings \{f^{\rm size}_j\} that fit all trainings.
+* 1 survivor → choose,
+* 0 → **IIS**,
+* > 1 → **AMBIGUOUS_SIZE** (return finite candidate set).
 
-3.2 Structural disambiguation
+**Receipt S0:** Candidate set; survivors after rules 1–4; chosen size or AMBIGUOUS_SIZE.
 
-Use training structures (frames & pattern behavior, in next stage) to eliminate size maps that:
-	•	cannot host the observed pattern invariants when applied to test input size,
-	•	or violate relational consistency (e.g., frame thickness, inner region proportions).
+---
 
-If exactly one size map remains, set:
+## 4. Stage F — Frame & distances (global relational coordinates)
 
-(H^{\text{test}}{\rm out},W^{\text{test}}{\rm out}) = f^{\rm size}*(H^{\text{test}}{\rm in},W^{\text{test}}_{\rm in}).
+Define output‑intrinsic scaffold.
 
-If >1 maps remain after all structural checks, the task is truly underdetermined in size; we report AMBIGUOUS_SIZE with that finite candidate set. Under your assumption that each ARC task has a unique intended output, in practice this shouldn’t happen if we’ve included enough structural invariants.
+### 4.1 Frame from training outputs
 
-Engineering: in practice, you check identity, equal sizes, factors, etc. In math, we keep this as “the union of all consistent integer relations that survive structural screening.”
+In canonical coords, the **frame set** is:
+[
+F = \bigl\{ p \;\big|\; \exists\, k\;\text{s.t.}\; c^{(i)}_{\text{out}}(p) = k\;\;\forall\, i \bigr\}.
+]
+(Positions with the same color across all train_out.)
 
-⸻
+### 4.2 Distance fields
 
-4.⁠ ⁠Stage F — Frame & distances (global relational coordinates)
+For each output grid (train_out and the test canvas size once fixed):
 
-We now find the frame (invariant background) and define canonical distance fields to that frame.
+* Build 4‑adjacency graph on cells.
+* **BFS source set:**
+  * If (F \neq \varnothing): multi‑source BFS from all cells in (F).
+  * Else: multi‑source BFS from the **outer border** (all cells (r{=}0), (r{=}H{-}1), (c{=}0), (c{=}W{-}1)).
+* Compute distances: (d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}}) (integers, 4‑adjacency).
+* **Inner region:** (S = \bigl\{ p \,:\, d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}} > 0 \bigr\}).
 
-4.1 Frame detection from training outputs
+**Receipt F:** Frame mask (F); ((d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}})) checksum; inner mask (S).
 
-In canonical coordinates, for each training output X^{(i)}_{\rm out}:
-	•	For each position p=(r,c), record its color c^{(i)}_{\rm out}(p).
+---
 
-Define:
+## 5. Stage N — Invariants as linear constraints (frozen, grid‑aware)
 
-F = \{p \mid \exists k \text{ such that } c^{(i)}_{\rm out}(p)=k\ \forall i\}.
+We use a **closed, grid‑aware atom universe** and promote “always‑true” facts across train_out to constraints on the test grid.
 
-These are positions that have the same color in every training output. Often this is the outer border of 8s/2s, but the definition is general.
+### 5.1 Atom universe (derivations, not detectors)
 
-On the test canvas, we will demand that positions that match the frame’s relational description get that same color.
+All computed in canonical coords.
 
-4.2 Distance fields
+**A. Scaffold & coords**
 
-For each grid X (training outputs and test canvas):
-	•	Build a graph of its cells (4-adjacent),
-	•	For each cell u (in canonical coords), compute:
-	•	Distance to the nearest frame cell, or if no frame, to the grid border:
-	•	d_top(u): minimal steps in −row direction to frame/border,
-	•	d_bottom(u): minimal steps in +row direction,
-	•	d_left(u): minimal steps in −col direction,
-	•	d_right(u): minimal steps in +col direction.
+* (H,W); (r,c); (r\pm c); midrow/midcol flags.
+* Mod classes: (r\bmod m,\, c\bmod m) for (m \in \{2,\dots,\min(6, \max(H,W))\} \cup \text{divisors}(H) \cup \text{divisors}(W)).
+* Block coords ((\lfloor r/b\rfloor,\lfloor c/b\rfloor)) and remainders for (b \in \{2,\dots,\min(5, \min(H,W))\} \cup \text{divisors}(H,W)).
 
-These distances are purely relational (they do not depend on absolute indices); for grids of different sizes, “midline” is “d_top = d_bottom”, etc.
+**B. Local texture**
 
-Inner region S_X is defined as all cells where all four distances are >0 (inside the frame). If no frame is detected, S_X can be entire grid or we define frame = border and S_X = interior.
+* N4/N8 neighbor counts per color.
+* 3×3 neighborhood hash (base‑11 packing; palette 0..9, sentinel=10 for out‑of‑grid padding when computed at borders).
+* 5×5 **ring** signature (perimeter only; sentinel=10 when ring steps outside grid).
+* Row/col run‑lengths through the cell: (\text{span_len}, \text{span_start}, \text{span_end}).
 
-Engineering: BFS or Dijkstra from frame / border cells to compute distances. Pure graph operations.
+**C. Connectivity & shape**
 
-⸻
+* Per‑color connected components; per‑component: area, perimeter (4‑edge), bbox, centroid (int floor), ((h,w)) (height and width as integers), (h{-}w) (aspect difference), aspect class, simple orientation sign; area rank; frame‑ring thickness class.
 
-5.⁠ ⁠Stage N — Extract all invariants as logical constraints
+**D. Repetition & tiling**
 
-This is the key step: we want a set of constraints that capture all invariants preserved by training, not just a tiny pattern family.
+* Minimal period along row/col (≤ dimension).
+* 2D tiling flags for block sizes dividing (H,W).
 
-We define a rich but finite set of relational features per cell, and from them we build constraints.
+**E. Palette/global**
 
-5.1 Feature atoms per cell (in S)
+* Per‑color pixel counts; per‑color component counts.
+* Palette present/missing; most/least frequent color(s).
+* Input↔output color permutation (bijective) & cyclic class over active palette.
 
-For each cell p=(r,c) in the pattern region S of each training output, we compute:
-	•	Color: col(p) ∈ \mathcal C.
-	•	Distances: d_top(p), d_bottom(p), d_left(p), d_right(p).
-	•	Neighbor counts: for each color k:
-count_N4_k(p) and count_N8_k(p).
-	•	Local patterns: the 3×3 neighborhood pattern around p (colors of neighbors); finite catalog.
-	•	Component IDs: for each color k, connected component index of p in that color (canonicalized within each grid).
+**F. Input features (guardrail)**
 
-These are atomic predicates that capture local and mid-scale structure. For a finite canvas and finite palette, there is a finite set of distinct atomic patterns that occur.
+* Mirror A–E on **inputs** to **evaluate predicates on test_in** **only when referenced by a mined law**.
+* **F24 does not create new laws.** It never mines from inputs.
 
-5.2 Invariant equations across trainings
+**G. Component transforms**
 
-For each atomic pattern type T (a combination of distance relations, local colors, and neighborhood), and each color k:
-	•	Look at all cells in all training outputs whose atomic type is T.
-	•	If every such cell has color k (and the training inputs do not violate this), we create a constraint:
-All test cells with atomic type T must be color k.
+* D4 (rot/ref) × integer scale (s) such that the transformed component fits inside the output grid; plus translations.
+* Accept only **exact set equality** across paired components in train_out; emit local‑coords flags if matched.
 
-We do similarly for more complex relations:
-	•	If in training outputs, whenever p has type T₁ and q has type T₂ and p and q are in a fixed relational position (e.g., same row at some offset) and they always share the same color, we enforce equality constraints for those positions in the test.
+### 5.2 Miner rules (frozen)
 
-In other words:
+Let (T(p)) be a deterministic **type key** (tuple from atoms in stable order):
+[
+T(p) = \bigl( d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}}, r{\pm}c, \{r\bmod m\}, \{c\bmod m\}, \text{3×3 hash}, \text{period flags}, \text{component shape ID} \bigr).
+]
 
-We scan the entire set of atomic types and relational patterns in training outputs, and every time we see a pattern “whenever this relational configuration holds, colors are always such and such”, we turn that into a linear constraint on the test coloring.
+* **Unary fixes (type ⇒ color):**
 
-This is the finite, implementable analog of “all FO+Count invariants are preserved”.
+  Let (k_i^{\text{bg}} = \arg\max_k \text{count}_i[k]) be the **modal background color** in training output (i) (on tie, smallest (k)).
 
-5.3 Explicit constraint forms
+  For type (T), if for **every** train_out at **every** occurrence of (T) the color is the **same** (k), **and** there exists at least one training where those (T)-cells have color (\neq k_i^{\text{bg}}) (**anti‑spurious**), then **fix** test cells of type (T) to (k): set (x_{p,k}=1).
 
-We now translate invariants to simple constraints over variables x_{p,k}\in\{0,1\}:
-	•	Assignment: \sum_k x_{p,k}=1 (each cell has one color).
-	•	Frame fix: if training says “frame cell p has color k in all outputs”, we set x_{p,k}=1.
-	•	Atomic type fix: if all training outputs say “cells of type T have color k”, then for each test cell p of type T, enforce x_{p,k}=1.
-	•	Equality ties: if “cells of type T₁ and T₂ at offset Δ alwayshave same color” in training, then for each matching pair (p,q) in test:
-x_{p,k} - x_{q,k} = 0,\quad\forall k.
-	•	Component constraints: if for color k, training shows that all cells in a certain component (under adjacency in S) have equal color or form some pattern, we create equality/inequality constraints within the corresponding test components.
+* **Relational equalities (ties):**
 
-All constraints are 0/1 linear equalities or inequalities in the x’s.
+  Consider finite grid‑aware relations (\Delta):
 
-Engineering: this is all loops over training outputs, atomic types, and matching patterns.
+  * Row/col offsets ((\delta_r, \delta_c)) where (\delta_r \in [-(H{-}1),+(H{-}1)], \delta_c \in [-(W{-}1),+(W{-}1)]).
+    **Clipping rule:** If pair ((p, p{+}\delta)) would be out‑of‑bounds in **any** training, discard that pairing entirely.
+  * Same diagonal class ((r{+}c) or (r{-}c)),
+  * Same component class,
+  * Same 3×3 hash class.
 
-If we do this exhaustively over our feature atom set, we capture all laws expressible as combinations of these atoms.
+  For a relation (\Delta), if for **every** train_out **all** matched pairs ((p,q)) realizing ((T_1,T_2,\Delta)) have **equal colors**, **and** at least one training sees a non‑background color ((c \neq k_i^{\text{bg}})) on those positions (**anti‑spurious**), then union them into an **equivalence class** (deduplicate via union‑find) and emit pairwise equalities to a canonical representative:
+  [
+  x_{p,k} = x_{\text{rep},k}\quad \forall k.
+  ]
 
-Under your requirement (“there is truly no other law”), we ensure 100% coverage by making the atom set rich enough to represent any pattern that appears in the training tasks.
+* **Forbids (optional, safe):**
+  If color (k) **never** occurs at type (T) in any train_out and this cannot conflict with any fix/equality, add (x_{p,k}=0).
 
-⸻
+**Receipt N:** Type→color table; DSU equivalence classes with member lists; forbid list; proof tables (zero exceptions + non‑background witness).
 
-6.⁠ ⁠Stage D — Ledger (interface cost) as objective
+---
 
-We still need the ledger (A1/A2) to choose among multiple x’s that satisfy all invariants. For grids, ledger is:
+## 6. Stage D — Ledger minimization (paid step, with certification)
 
-sum of costs for edges where neighboring cells have different colors.
+**Ledger principle:** minimize interface cost subject to Stage N constraints. We provide two **spec‑valid** computational paths; the implementation must choose the one that is **certified exact** for the instance.
 
-Formally, for the test canvas:
-	•	Let E be the set of 4-neighbor edges (p,q).
-	•	Interface cost for coloring x:
-\text{Cost}(x)= \sum_{(p,q)\in E} \sum_k w_{pq} |x_{p,k} - x_{q,k}|,\quad w_{pq}\ge 0.
-For simplicity, all weights w_{pq}=1.
+* **Full‑TV ILP (reference):** minimize cuts over **all** 4‑neighbor edges (as in the original text).
+* **TU‑LP with tree‑TV (preferred when certified):** minimize cuts over a **canonical spanning tree**; prove TU and integrality; verify uniqueness; if certification fails, **fallback to full‑TV ILP**.
 
-So the optimization problem is:
-	•	Variables: x_{p,k}\in\{0,1\}.
-	•	Constraints: all linear equalities from Stage N (invariants + assignment).
-	•	Objective: minimize Cost(x).
+### 6.1 Preferred path: TU‑LP with tree‑TV (fast, certified)
 
-This is a 0–1 ILP (integer linear program). There is no approximation: the global minimizer is the unique ledger-minimal coloring consistent with all laws.
+* Build the canonical BFS **spanning tree** (T) of the test canvas:
+  * Root: ((r{=}0, c{=}0)) in canonical order.
+  * Neighbor visit order: (up, right, down, left) in canonical ordering.
 
-Engineering: you implement Cost(x) with standard linearization using slack variables s_{pq,k} ≥ |x_{p,k} − x_{q,k}| and minimize ∑s_{pq,k}. Any MILP solver (CBC, Gurobi, CPLEX, etc.) can handle grids of ARC size easily.
+* Variables (LP):
+  (x_{p,k}\in[0,1]) (one‑hot); (s_{e,k}\ge 0) for (e\in T).
 
-⸻
+* Constraints:
 
-7.⁠ ⁠Full math program (for the test output)
+  1. **Assignment:** (\sum_k x_{p,k}=1) for all cells (p).
+  2. **Fixes:** set (x_{p,k}=1) where mined.
+  3. **Equalities:** for each equivalence class (E), tie (x_{p,k}) to the class representative for all (k).
+  4. **Tree‑TV:** for each (e=(p,q)\in T), each color (k):
+     [
+     s_{e,k} \ge x_{p,k} - x_{q,k},\qquad
+     s_{e,k} \ge x_{q,k} - x_{p,k}.
+     ]
 
-Let:
-	•	P be the set of test canvas cells (canonical coords),
-	•	K be the set of colors in training outputs.
+* **Objective:** (\min \sum_{e\in T}\sum_k s_{e,k}.)
 
-Variables
-	•	x_{p,k}\in\{0,1\} for each p∈P, k∈K (color assignment),
-	•	Slack s_{p,q,k} \ge 0 for each edge (p,q)\in E, k∈K, used to linearize |x_{p,k}−x_{q,k}|.
+* **TU certification (constructive):**
 
-Constraints
-	1.	One color per cell:
-\sum_{k\in K} x_{p,k}=1,\quad\forall p\in P.
-	2.	Frame & invariants:
-For each invariant from Stage F/N:
-	•	Fixed color: x_{p,k}=1, or
-	•	Equality: x_{p,k} - x_{q,k}=0, or
-	•	Forbids: x_{p,k}=0.
-	3.	TV linearization:
-s_{p,q,k} \ge x_{p,k} - x_{q,k},\quad
-s_{p,q,k} \ge x_{q,k} - x_{p,k}.
+  Implement the following structural check:
 
-Objective
+  1. **Contract equalities per color:** Use union‑find to contract equality classes separately for each color (k), creating supernodes.
+  2. **Build incidence matrices:** For each color (k), construct the oriented incidence matrix (\mathbf{B}_k) of the contracted tree (T_k) (same root orientation). Incidence matrices of forests are TU.
+  3. **TV rows as [\mathbf{B}_k | -\mathbf{I}]:** Each TV constraint row is ([B_k \mid {-}I]) per color (adding identity on slacks preserves TU).
+  4. **Assignment rows as partition matrix:** Assignment rows ((\sum_k x_{p,k}=1)) form a partition matrix across colors; this is TU and block‑separable per node.
+  5. **Block-diagonal composite:** The final matrix is a block‑diagonal stack over colors for ([\mathbf{B}_k \mid {-}\mathbf{I}]) plus a laminar set of assignment rows across color blocks—this composite is TU.
 
-\min\ \sum_{(p,q)\in E}\sum_{k\in K} s_{p,q,k}.
+  Verify by constructing (\mathbf{B}_k) explicitly and checking that each column appears in at most two signed rows per block and that partition rows are (0/1).
 
-This is a standard 0–1 ILP.
+  If any structural step fails (e.g., a non‑tree edge sneaks in), mark **TU‑FAIL** and go to **6.2**.
 
-Result: Any optimal solution x* gives exact colors; decode:
+  If TU certification passes, solve as **LP** with integrality tolerance (\tau = 10^{-9}). If LP returns non‑integral (x), go to **6.2**.
 
-X^{\text{test}}{\rm out}(p)=k \text{ such that }x^{*}{p,k}=1.
+* **Uniqueness probe (optional but recommended):**
+  Add a single “Hamming‑cut” excluding the found solution and re‑solve once as MILP.
+  If infeasible or objective increases → unique; else **AMBIGUOUS_SOLN** (return a second optimal coloring and the diff mask).
 
-There is no chance of fractional outputs – integrality is enforced by the ILP itself, not TU.
-There is no chance of missing legal solutions – all constraints came from training invariants and ledger.
+> **Note:** Tree‑TV is a lower‑bound proxy for full‑TV. With the equality constraints mined in Stage N, cycles are typically closed, and the tree objective equals the full cut objective on feasible colorings. Certification + fallback (6.2) ensures exactness w.r.t. A2.
 
-⸻
+### 6.2 Reference path: full‑TV ILP (exact fallback)
 
-8.⁠ ⁠Edge cases and why they’re explicit, not hidden
+* Edge set (E) = **all** 4‑neighbor edges ((p,q)).
+* Variables (0–1): (x_{p,k}\in{0,1}); auxiliary slacks or XOR diffs per edge & color.
+* Constraints:
 
-There are only three possible outcomes:
-	1.	Unique optimum x*:
-	•	The solver finds a unique optimal coloring x*.
-	•	That is X^{\text{test}}_{\rm out}.
-	•	Idempotence: treat this as an extra training pair and re-run; the same x* must reappear.
-	2.	Multiple optimal x* (tie in ledger):
-	•	Solver/tracker can identify at least two distinct optimal solutions; this means training + ledger do not determine a unique coloring.
-	•	Under your assumption that ARC tasks have unique intended outputs, this indicates our invariant set was not rich enough; we’d then extend atoms and invariants and re-run.
-	•	In the math spec, we call this AMBIGUOUS_SOLN and return both x’s and their symmetric difference.
-	3.	Infeasibility:
-	•	ILP solver reports no feasible x.
-	•	That means training invariants contradict each other (or we misencoded invariants).
-	•	We return IIS (minimal infeasible subset of constraints) for debugging.
+  * Assignment, fixes, equalities as above.
+  * TV linearization on **all** edges:
+    [
+    s_{(p,q),k} \ge x_{p,k} - x_{q,k},\quad
+    s_{(p,q),k} \ge x_{q,k} - x_{p,k}.
+    ]
+* **Objective:** (\min \sum_{(p,q)\in E}\sum_k s_{(p,q),k}.)
 
-These modes are not arbitrary; they are exact mathematical statements about the input consistency and law completeness.
+This is the exact formulation stated originally. Use MILP to guarantee a global optimum when TU‑LP certification fails.
 
-For ARC-AGI2 tasks under TOE, the spec assumes:
-	•	With a sufficiently rich invariants set, the first case (unique optimum) will always hold for the benchmark tasks,
-	•	If we ever hit AMBIGUOUS or IIS, it tells us where in the invariants we were insufficient or wrong.
+**Receipt D:** Structural TU check (pass/fail); LP objective; integrality violations (by (\tau)); uniqueness probe outcome or MILP optimal value.
 
-⸻
+---
 
-9.⁠ ⁠Why this meets your 100% requirement
-	•	The space of possible outputs is finite and fully covered by the ILP domain (all 0/1 assignments).
-	•	All invariants that the law must respect are explicitly encoded as linear constraints; there is no hidden law we “hope” Φ or a small rule family captured – we design the invariant extraction to be logically complete for the size of grids we care about.
-	•	Interface cost is explicit and exactly minimized by the ILP solver.
-	•	Canonical labeling removes all minted coordinate differences, so we’re not fooled by rotations/flips.
+## 7. Full program (test output)
 
-There is no step that relies on:
-	•	hand-chosen “cross detection,”
-	•	guesses of function class f(H,W),
-	•	lexicographic tie-breaking not backed by training or physics.
+Let (P) be test canvas cells; (K = \bigcup_i \text{Palette}(X_{\text{out}}^{(i)})) the **color set seen in training outputs**. Do not allow unseen colors unless a mined law explicitly references an input→output palette mapping.
 
-Engineering is:
-	1.	Use a canonical labeling library once.
-	2.	Compute distances/features and invariants via loops over training outputs.
-	3.	Build a standard 0–1 ILP (using pulp, cvxpy, or any MILP solver).
-	4.	Solve, decode.
+* Variables: (x_{p,k}) (LP/LBP or Bool in MILP), TV slacks (s).
+* Constraints:
 
-All complexity is in the solver, which is standard. There is no bespoke “intelligence” scattered across the code; the “intelligence” is purely in the invariant extraction, which is defined relationally.
+  1. (\sum_{k\in K} x_{p,k}=1) for all (p\in P),
+  2. Fixes / equalities / forbids from N,
+  3. TV constraints (tree edges for TU‑LP; all edges for MILP).
+* Objective: minimize the corresponding TV sum.
 
-⸻
+**Solve policy:** attempt **TU‑LP tree‑TV** with signer and integrality check; if certification fails (or ambiguity detected and you choose to disambiguate), **fallback to full‑TV ILP**.
 
-Short version for an engineer
-	1.	Canonicalize all grids (train in/out + test in) using a graph canonical labeling library to get a stable row/col ordering.
-	2.	Compute a rich set of relational features (distances to borders/frame, neighbor colors, local 3×3 patterns, component IDs) on all training outputs.
-	3.	For each relational pattern, record color invariants (e.g., “all cells of type T are color k in every training output”). Turn each invariant into a linear constraint on test x[p,k].
-	4.	Define x[p,k] as binary, one color per cell; define TV slacks s[p,q,k] for edges; set objective = sum s[p,q,k].
-	5.	Solve the resulting 0–1 ILP.
-	6.	Decode the solution x* to the test output grid.
+**Decode:** (X^{\text{test}}_{\rm out}(p)=\arg\max_k x^*_{p,k}) (LP is integral when TU holds).
 
-This is the simplest, exhaustive math spec that:
-	•	Is fully aligned with TOE,
-	•	Has no hidden edge cases,
-	•	And, with a sufficiently rich but finite invariant set, can match all 1000 ARC-AGI2 tasks, because any “law” they express is just a specific pattern of invariants plus minimal interface cost.
+**Deterministic ordering:** Index variables in lexicographic order ((r, c, k)) with colors sorted ascending; store in receipts.
+
+---
+
+## 8. Edge cases (explicit)
+
+* **Unique optimum:** output is (x^*), decode grid; **idempotence** must hold ((N^2=N)).
+* **Multiple optima:** return **AMBIGUOUS_SOLN** with two witnesses and their symmetric difference; (optionally escalate to full‑TV ILP if you want the exact ledger tie‑break).
+* **Infeasible:** **IIS** — training invariants contradict (or miner error); return a minimal infeasible subset.
+
+---
+
+## 9. Why this meets the 100% requirement
+
+* Finite grid ⇒ finite search space; the closed, grid‑aware atom universe + “always‑true” mining captures FO+Count‑style invariants decisively.
+* Ledger minimization is **exact** by construction:
+
+  * Either **TU‑LP** is certified (signer + integrality), yielding an integral optimum under the tree objective that coincides with the full objective when Stage N closes cycles,
+  * Or we **fallback to full‑TV ILP**, which exactly minimizes sum of all interface cuts (A2) with no approximation.
+* Π removes minted differences, so invariants are relational and transferable across sizes.
+
+**Short version for engineering:**
+Canonicalize → scaffold (train_out) → size map (screened) → mine fixes/equalities (grid‑aware atoms; strong “always” + anti‑spurious; union‑find) → **solve TU‑LP (tree‑TV) with signer**, else **fallback to full‑TV MILP** → decode → idempotence check.
+
+---
+
+### Notes (trace & receipts)
+
+* Receipts are optional: enable `trace=True` to dump canonical maps, scaffold stats, mined rule tables, TU signer report, objective, and uniqueness probe outcome.
+* F24 is evaluation‑only: input features parameterize predicates of **already‑mined** laws; they never create new laws.
+
+---
+
+## Micro‑clarifications (executable definitions)
+
+These lock down any remaining ambiguity for deterministic implementation:
+
+1. **Hash sentinel:** "We use base‑11 for 3×3 and 5×5 hashes; palette 0..9; sentinel=10 for out‑of‑grid padding."
+
+2. **Background color per training:** (k_i^{\text{bg}} = \arg\max_k \text{count}_i[k]) (on tie, smallest (k)).
+
+3. **"Always" means all trainings, all realizations:** If a template instance (type, relation, offset) would be out‑of‑bounds for **any** training, that instance is discarded entirely.
+
+4. **No input mining:** Input features (F24) are **only** evaluated for already‑mined rules. They **never** create rules.
+
+5. **TU certification path:** Use the constructive incidence‑block reasoning (contract equalities per color → build (\mathbf{B}_k) → verify structure). If any structural precondition breaks, declare **TU‑FAIL** and run the full‑TV ILP.
+
+6. **Variable ordering:** Variables indexed as ((r, c, k)) in lexicographic order with (k) sorted ascending (0..9).
+
+7. **Idempotence enforcement:** Re‑run with ((X_{\text{in}}^{\text{test}}, X_{\text{out}}^{\text{test}})) appended to training; output must be bit‑identical.
+
+---
+
+## Appendix: Minimal certification policy
+
+To guarantee "spec = code":
+
+1. **TU signer pass** + **integral LP solution** → accept TU‑LP result.
+2. Else → **run full‑TV MILP** and output that optimal coloring.
+3. (Optional) **Uniqueness probe** on LP result to label AMBIGUOUS_SOLN when appropriate.
+
+### Minimal acceptance tests
+
+These tests can be integrated into CI or run manually:
+
+1. **Canon repeatability:** Hash of ((\mathbf{R}_X, \mathbf{C}_X)) is constant across two runs on the same task.
+2. **Rule miner invariants:** For each mined rule, a replay on all train_out re‑derives the rule byte‑identically.
+3. **TU structural check:** For 50 random tasks, confirm TU‑LP path passes; else ILP fallback returns the same coloring.
+4. **Idempotence:** For test outputs produced, appending to train and re‑solving yields bit‑identical output.
+5. **Ambiguity harness:** Synthetic tasks with symmetric halves trigger AMBIGUOUS_SOLN (two witnesses collected).
+
+---

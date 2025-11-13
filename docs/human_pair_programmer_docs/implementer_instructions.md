@@ -33,8 +33,8 @@ hope this helps
 
 
 # latest
-now ur role is that of an implemetner. following is the work order u need to implement.
-  refer to @docs/repo_structure.md  to knw repo strucutre.
+now ur role is that of an implemetner. 
+u need to follow the Work order and see that it aligns with ur understanding of @docs/anchors and is in line with @docs/IMPLEMENTATION_PLAN.md  following is the work order u need to implement.
   data/ folder has training challenges of arc agi 
   do create a venv if u need any installations.
   ---

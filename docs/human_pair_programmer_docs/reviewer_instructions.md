@@ -13,8 +13,7 @@
   =======
 
 now pls understand ur role. u r the reviewer+tester. u dont write code in core logic. u may write tests though..
-    here is the work order we need to implement.
-    pls refer to @docs/repo_structure.md to understand repo strucuture
+u need to understand the Work order and see that it aligns with ur understanding of @docs/anchors and is in line with @docs/IMPLEMENTATION_PLAN.md
     here is the work order:
     ---
     [Pasted text #1 +378 lines]
