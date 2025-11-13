@@ -46,13 +46,14 @@ minimal_act = _minimal_act.solve
 fixed_point_check = _fixed_point.check
 
 
-def run_task(task_id: str, data_path: str, trace: bool = False):
+def run_task(task_id: str, data_path: str, test_index: int = 0, trace: bool = False):
     """
     Execute the full 7-stage pipeline on a single ARC task.
 
     Args:
         task_id: ARC task ID (e.g., "00576224")
         data_path: path to arc-agi_training_challenges.json
+        test_index: index into raw_task['test'] (0-based) to solve for
         trace: enable debug logging and receipts
 
     Returns:
@@ -79,6 +80,7 @@ def run_task(task_id: str, data_path: str, trace: bool = False):
 
     task_bundle = {
         "task_id": task_id,
+        "test_index": test_index,
         "raw_task": raw_task,
     }
 
@@ -139,6 +141,13 @@ Examples:
     )
 
     parser.add_argument(
+        "--test-index",
+        type=int,
+        default=0,
+        help="Index into raw_task['test'] (0-based) to solve for (default: 0)",
+    )
+
+    parser.add_argument(
         "--trace",
         action="store_true",
         help="Enable debug logging and receipts",
@@ -154,7 +163,7 @@ Examples:
         )
 
     try:
-        solution = run_task(args.task_id, args.data, trace=args.trace)
+        solution = run_task(args.task_id, args.data, test_index=args.test_index, trace=args.trace)
 
         # Print final output grid
         # (solution.out_grid will be implemented in later milestones)

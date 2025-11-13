@@ -87,7 +87,7 @@ arc_cognition/
 
 **Goal:** load ARC JSON; canonicalize all grids in a shared gauge.
 
-### WO‑1.1 Present: JSON loader (80–120 LOC)
+### WO‑1.1 Present: JSON loader (80–120 LOC) ✅ COMPLETED
 
 * Parse ARC task into: `train_in`, `train_out`, `test_in` as `np.ndarray[int8]`.
 * Validate: palette in 0..9; H,W ≤ 30.

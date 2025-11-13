@@ -101,9 +101,10 @@ def load(task_bundle: Dict[str, Any], trace: bool = False) -> Dict[str, Any]:
     """
     task_id = task_bundle["task_id"]
     raw_task = task_bundle["raw_task"]
+    test_index = task_bundle.get("test_index", 0)
 
     if trace:
-        logging.info(f"[present] load() called for task_id={task_id}")
+        logging.info(f"[present] load() called for task_id={task_id}, test_index={test_index}")
 
     # Parse training pairs
     train_in_arrays = []
@@ -114,11 +115,16 @@ def load(task_bundle: Dict[str, Any], trace: bool = False) -> Dict[str, Any]:
         train_in_arrays.append(g_in)
         train_out_arrays.append(g_out)
 
-    # Parse test inputs
-    test_in_arrays = []
-    for t in raw_task["test"]:
-        g_test = _to_grid(t["input"])
-        test_in_arrays.append(g_test)
+    # Parse test input (single test per run)
+    # Handle multiple test inputs: treat each (task_id, test_index) as independent
+    test_items = raw_task["test"]
+    if not (0 <= test_index < len(test_items)):
+        raise IndexError(
+            f"test_index={test_index} out of range for task_id={task_id} "
+            f"(len(test)={len(test_items)})"
+        )
+    g_test = _to_grid(test_items[test_index]["input"])
+    test_in_arrays = [g_test]
 
     # Extract shapes and palettes
     shapes_train_in, palettes_train_in = _shapes_and_palette(train_in_arrays)
@@ -134,7 +140,7 @@ def load(task_bundle: Dict[str, Any], trace: bool = False) -> Dict[str, Any]:
         "shapes": {
             "train_in": shapes_train_in,
             "train_out": shapes_train_out,
-            "test_in": shapes_test_in[0] if len(shapes_test_in) == 1 else shapes_test_in,
+            "test_in": shapes_test_in[0],  # Single test grid per run by construction
         },
         "palettes": {
             "train_in": palettes_train_in,
