@@ -1080,3 +1080,274 @@ def get_input_atoms_for_test(
     _input_atoms_cache[test_idx] = atoms
 
     return atoms
+
+
+# ============================================================================
+# G-atoms: Component rigid/affine transforms (WO-4.6)
+# ============================================================================
+
+
+def _d4_variants(patch: np.ndarray):
+    """
+    Generate all 8 D4 (dihedral group) transforms of a 2D patch.
+
+    D4 consists of:
+      - 4 rotations (0°, 90°, 180°, 270°)
+      - 4 reflections (horizontal, vertical, main diagonal, anti-diagonal)
+
+    Yields:
+      (op_name: str, transformed_patch: np.ndarray)
+    """
+    # Identity
+    yield "id", patch
+
+    # Rotations (counterclockwise)
+    yield "rot90", np.rot90(patch, k=1)
+    yield "rot180", np.rot90(patch, k=2)
+    yield "rot270", np.rot90(patch, k=3)
+
+    # Reflections
+    yield "flip_h", np.flipud(patch)         # flip horizontal axis
+    yield "flip_v", np.fliplr(patch)         # flip vertical axis
+    yield "flip_d1", np.transpose(patch)     # flip main diagonal
+    yield "flip_d2", np.fliplr(np.flipud(np.transpose(patch)))  # flip anti-diagonal
+
+
+def compute_G_atoms(
+    grid: np.ndarray,
+    C_atoms: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Compute G-atoms (component rigid/affine transforms) for a single output grid.
+
+    Anchors:
+      - 00_MATH_SPEC.md §5.1 G: Component transforms
+        "D4 (rot/ref) × integer scale (s) such that the transformed component
+        fits inside the output grid; plus translations. Accept only **exact set
+        equality** across paired components in train_out."
+      - IMPLEMENTATION_PLAN.md WO-4.6
+
+    Algorithm:
+      1. Recover per-color component masks via ndimage.label (4-connectivity)
+      2. For each color, group components into "templates" via D4×scale equivalence:
+         - For each component, try to match against existing templates
+         - Match = template scaled isotropically by s + D4 transform equals component exactly
+         - If no match, create new template (component is its own canonical shape)
+      3. Populate per-cell flags: template_id, local_r, local_c (offset from bbox)
+
+    Input:
+      grid: H×W canonical output grid (colors 0..9)
+      C_atoms: result from compute_C_atoms on this grid, containing:
+        {
+          "components": {
+            k: [
+              {"label": int, "bbox": (r_min, c_min, r_max, c_max), ...},
+              ...
+            ]
+          }
+        }
+
+    Output:
+      {
+        "templates": {
+          k: [  # per color k, list of canonical template shapes
+            {"bbox": (r0, c0, r1, c1), "mask": np.ndarray[(h,w), bool]},
+            ...
+          ]
+        },
+        "component_to_template": {
+          k: [  # per component (same order as C_atoms["components"][k])
+            {"template_idx": int, "scale": int, "d4_op": str},
+            ...
+          ]
+        },
+        "template_id": np.ndarray[(H,W), int],  # -1 if background
+        "local_r": np.ndarray[(H,W), int],      # row offset in component bbox
+        "local_c": np.ndarray[(H,W), int],      # col offset in component bbox
+      }
+
+    Raises:
+      ValueError: if C_atoms missing required fields
+    """
+    H, W = grid.shape
+
+    if C_atoms is None or "components" not in C_atoms:
+        raise ValueError("G-atoms require C_atoms with 'components' field")
+
+    components = C_atoms["components"]
+    colors = np.unique(grid)
+
+    # ========== 1. Recover per-color component label maps ==========
+    # C_atoms has label values per component, but not full label array
+    # Recompute via ndimage.label for mask extraction
+    label_maps = {}  # k -> (labels: np.ndarray, num_labels: int)
+
+    structure_4 = np.array([[0, 1, 0],
+                            [1, 1, 1],
+                            [0, 1, 0]], dtype=int)
+
+    for k in colors:
+        mask = (grid == k).astype(np.uint8)
+        if mask.any():
+            labels, num = ndimage.label(mask, structure=structure_4)
+        else:
+            labels, num = np.zeros((H, W), dtype=int), 0
+        label_maps[int(k)] = (labels, num)
+
+    # ========== 2. Build templates via D4×scale equivalence (per color) ==========
+    templates = {}              # k -> list of template dicts
+    component_to_template = {}  # k -> list of transform params (per component)
+
+    for k in colors:
+        k = int(k)
+        if k not in components or len(components[k]) == 0:
+            templates[k] = []
+            component_to_template[k] = []
+            continue
+
+        labels_k, _ = label_maps[k]
+        comps_k = components[k]
+
+        templates_k = []
+        comp_to_template_k = []
+
+        for comp in comps_k:
+            # Extract component mask patch
+            r_min, c_min, r_max, c_max = comp["bbox"]
+            label_val = comp["label"]
+
+            # Component mask in bbox frame
+            r0, c0, r1, c1 = r_min, c_min, r_max, c_max
+            comp_labels_patch = labels_k[r0:r1 + 1, c0:c1 + 1]
+            comp_mask_patch = (comp_labels_patch == label_val)
+
+            h_comp, w_comp = comp_mask_patch.shape
+
+            # Try to match against existing templates
+            matched = False
+
+            for t_idx, template in enumerate(templates_k):
+                mask_T = template["mask"]
+                hT, wT = mask_T.shape
+
+                # Check if component can be a scaled version of template
+                # Isotropic scaling only: s_h == s_w
+                if h_comp % hT != 0 or w_comp % wT != 0:
+                    continue
+
+                s_h = h_comp // hT
+                s_w = w_comp // wT
+
+                if s_h != s_w:
+                    continue  # Not isotropic
+
+                s = s_h
+
+                # Scale template via Kronecker product
+                scaled_T = np.kron(mask_T.astype(np.uint8),
+                                   np.ones((s, s), dtype=np.uint8)).astype(bool)
+
+                # Try all D4 transforms on scaled template
+                for op_name, transformed in _d4_variants(scaled_T):
+                    if transformed.shape != comp_mask_patch.shape:
+                        continue
+
+                    if np.array_equal(transformed, comp_mask_patch):
+                        # Exact match found!
+                        comp_to_template_k.append({
+                            "template_idx": t_idx,
+                            "scale": s,
+                            "d4_op": op_name,
+                        })
+                        matched = True
+                        break  # Stop trying D4 ops for this template
+
+                if matched:
+                    break  # Stop trying other templates
+
+            if not matched:
+                # Create new template (component is its own canonical shape)
+                new_idx = len(templates_k)
+                templates_k.append({
+                    "bbox": (0, 0, h_comp - 1, w_comp - 1),  # canonical frame
+                    "mask": comp_mask_patch.copy(),
+                })
+                comp_to_template_k.append({
+                    "template_idx": new_idx,
+                    "scale": 1,
+                    "d4_op": "id",
+                })
+
+        templates[k] = templates_k
+        component_to_template[k] = comp_to_template_k
+
+    # ========== 3. Populate per-cell flags ==========
+    # template_id must be unique across ALL colors, so offset per color
+    template_id = -np.ones((H, W), dtype=int)
+    local_r = np.zeros((H, W), dtype=int)
+    local_c = np.zeros((H, W), dtype=int)
+
+    # Build global template ID offset for each color
+    global_template_offset = {}
+    next_global_id = 0
+    for k in sorted(colors):  # Process in sorted order for determinism
+        k = int(k)
+        global_template_offset[k] = next_global_id
+        if k in templates:
+            next_global_id += len(templates[k])
+
+    for k in colors:
+        k = int(k)
+        if k not in components or len(components[k]) == 0:
+            continue
+
+        labels_k, _ = label_maps[k]
+        comps_k = components[k]
+        offset = global_template_offset[k]
+
+        for ci, comp in enumerate(comps_k):
+            t_idx_local = component_to_template[k][ci]["template_idx"]
+            t_idx_global = offset + t_idx_local  # Make globally unique
+
+            r_min, c_min, r_max, c_max = comp["bbox"]
+            label_val = comp["label"]
+
+            # Find all pixels belonging to this component
+            mask_ci = (labels_k == label_val)
+            rs, cs = np.where(mask_ci)
+
+            # Set per-cell flags
+            template_id[rs, cs] = t_idx_global
+            local_r[rs, cs] = rs - r_min
+            local_c[rs, cs] = cs - c_min
+
+    return {
+        "templates": templates,
+        "component_to_template": component_to_template,
+        "template_id": template_id,
+        "local_r": local_r,
+        "local_c": local_c,
+    }
+
+
+def trace_G_atoms(G_atoms: Dict[str, Any], grid: np.ndarray) -> None:
+    """
+    Trace G-atoms for debugging.
+
+    Shows template counts per color and unique template_id values.
+    """
+    H, W = grid.shape
+    print(f"[G-atoms] grid shape: {H}×{W}")
+
+    # Show template counts per color
+    for k, templates_k in G_atoms["templates"].items():
+        if len(templates_k) > 0:
+            print(f"[G-atoms] color {k}: {len(templates_k)} template(s)")
+            for ti, template in enumerate(templates_k):
+                h, w = template["mask"].shape
+                print(f"  template {ti}: shape ({h}×{w})")
+
+    # Show unique template_id values (excluding -1 for background)
+    unique_tids = np.unique(G_atoms["template_id"])
+    unique_tids = unique_tids[unique_tids >= 0]  # Filter out background
+    print(f"[G-atoms] unique template_id values: {unique_tids.tolist()}")

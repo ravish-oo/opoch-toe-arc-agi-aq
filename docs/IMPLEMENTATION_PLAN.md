@@ -197,7 +197,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 * Cyclic color class over active palette.
   **Acceptance:** values correct on crafted examples.
 
-### WO‑4.5 Input feature mirror (F24) (≤30 LOC)
+### WO‑4.5 Input feature mirror (F24) (≤30 LOC) ✅ COMPLETED
 
 * Reuse A–E **on inputs** to **evaluate** predicates on `test_in` **only when** a mined law references an input feature.
 * **Guardrail (explicit):** **F24 does not create new laws.** It only supplies values to instantiate predicates for laws already mined from train_out.

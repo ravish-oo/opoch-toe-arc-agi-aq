@@ -485,3 +485,186 @@ From training pairs, reconstruct the input→output color mapping by scanning al
 9→8, 4→3
 1→5
 If your atom implementation produces these summaries, you’re in sync with the spec on 0d3d703e for M4.
+#### 05f2a901
+{
+  "task_id": "05f2a901",
+  "atoms_summary": {
+    "train_out": [
+      {
+        "index": 0,
+        "pixel_counts": {
+          "0": 77,
+          "2": 9,
+          "8": 4
+        },
+        "component_counts_nonzero": {
+          "2": 1,
+          "8": 1
+        },
+        "row_period_hist": {
+          "1": 4,
+          "6": 2,
+          "7": 1,
+          "8": 2
+        },
+        "col_period_hist": {
+          "1": 5,
+          "6": 3,
+          "8": 2
+        }
+      },
+      {
+        "index": 1,
+        "pixel_counts": {
+          "0": 116,
+          "2": 6,
+          "8": 4
+        },
+        "component_counts_nonzero": {
+          "2": 1,
+          "8": 1
+        },
+        "row_period_hist": {
+          "1": 10,
+          "6": 2,
+          "8": 1,
+          "9": 1
+        },
+        "col_period_hist": {
+          "1": 4,
+          "9": 1,
+          "10": 2,
+          "12": 2
+        }
+      },
+      {
+        "index": 2,
+        "pixel_counts": {
+          "0": 96,
+          "2": 10,
+          "8": 4
+        },
+        "component_counts_nonzero": {
+          "2": 1,
+          "8": 1
+        },
+        "row_period_hist": {
+          "1": 6,
+          "7": 3,
+          "8": 1,
+          "9": 1
+        },
+        "col_period_hist": {
+          "1": 5,
+          "7": 2,
+          "8": 1,
+          "10": 2
+        }
+      }
+    ]
+  }
+}
+
+How your tester should compute these
+For each train_out[i]:
+pixel_counts
+Count occurrences of each color in the grid:
+from collections import Counter
+pixel_counts = Counter(v for row in grid for v in row)
+Expect exactly the numbers above per index.
+component_counts_nonzero (N4 components for colors > 0)
+For each color k > 0, run an N4 flood-fill / BFS and count components:
+component_counts_nonzero[color] = number_of_connected_components_of_that_color
+For all three grids, both 2 and 8 form exactly one connected component.
+row_period_hist
+Define minimal period of a row as smallest p in 1..W such that row[j] == row[j % p] for all j.
+For each train_out[i], compute all row periods and tally them:
+from collections import Counter
+row_period_hist = Counter(minimal_period(row) for row in grid)
+Compare to the row_period_hist maps above.
+col_period_hist
+Same procedure column-wise:
+col = [grid[r][c] for r in range(H)]
+col_period_hist = Counter(minimal_period(col) for c in range(W))
+Compare to col_period_hist above.
+If your atom implementation produces these summaries, you’re in spec for atoms C/D/E on 05f2a901.
+#### 46f33fce
+{
+  "task_id": "46f33fce",
+  "atoms_summary": {
+    "train_out": [
+      {
+        "index": 0,
+        "pixel_counts": {
+          "0": 304,
+          "1": 16,
+          "2": 32,
+          "3": 16,
+          "4": 16,
+          "8": 16
+        },
+        "component_counts_nonzero": {
+          "1": 1,
+          "2": 1,
+          "3": 1,
+          "4": 1,
+          "8": 1
+        },
+        "row_period_hist": {
+          "1": 4,
+          "16": 4,
+          "20": 12
+        }
+      },
+      {
+        "index": 1,
+        "pixel_counts": {
+          "0": 304,
+          "1": 16,
+          "2": 16,
+          "3": 32,
+          "4": 32
+        },
+        "component_counts_nonzero": {
+          "1": 1,
+          "2": 1,
+          "3": 2,
+          "4": 2
+        },
+        "row_period_hist": {
+          "12": 4,
+          "16": 4,
+          "20": 12
+        }
+      },
+      {
+        "index": 2,
+        "pixel_counts": {
+          "0": 320,
+          "1": 32,
+          "2": 16,
+          "3": 16,
+          "4": 16
+        },
+        "component_counts_nonzero": {
+          "1": 1,
+          "2": 1,
+          "3": 1,
+          "4": 1
+        },
+        "row_period_hist": {
+          "1": 12,
+          "20": 8
+        }
+      }
+    ]
+  }
+}
+How the tester should use this
+After WO-4.1–4.4 for 46f33fce:
+For each train_out[i]:
+Compute pixel_counts[color] = number of cells with that color.
+Compute component_counts_nonzero[color] via N4 connectivity for colors > 0.
+Compute row_period_hist: for each row, find the minimal period p (1..W) such that row[j] == row[j % p] for all j, then tally counts of each p.
+Compare these three summaries per grid index with the golden above.
+If they match (up to your JSON normalisation), your A/C/D/E atoms for this task are implemented correctly.
