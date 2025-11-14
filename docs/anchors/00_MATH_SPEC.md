@@ -93,23 +93,30 @@ Collect integer relations that fit **all** training pairs:
 
 ### 3.2 Structural disambiguation (train_out‑only)
 
-Screen candidates for the test size using only F‑facts from train_out. Each candidate ((H', W')) must pass:
+Apply each size map family to ((H^{\text{test}}_{\text{in}}, W^{\text{test}}_{\text{in}})) to derive candidate output sizes, then **deduplicate by ((H', W'))**: different families yielding the same output size are Π-equivalent (minted differences). Screen the unique SIZES, not individual family instances.
 
-1. **Feasibility:** For every training output's learned frame thickness (t) and inner region ((h_{\text{inner}}, w_{\text{inner}})):
+Each unique size ((H', W')) must pass:
+
+1. **Feasibility (weak):** For the minimum inner region dimensions across all training outputs:
    [
-   H' \ge h_{\text{inner}} + 2t, \quad W' \ge w_{\text{inner}} + 2t.
+   H' \ge h_{\text{inner}}^{\min}, \quad W' \ge w_{\text{inner}}^{\min}.
    ]
+   Frame thickness ((2t)) and padding are law-level choices (Stage N), not S0 geometry constraints.
 2. **Parity:** If all train_out have a midrow ((\exists r: d_{\text{top}}(r) = d_{\text{bottom}}(r))) then (H') must be odd; similarly for (W') and midcol.
-3. **Periodicity:** If train_out rows (or cols) have least period (p) everywhere inside the inner region, then (p \mid H') (resp. (p \mid W')).
-4. **Tiling constants:** For maps (H' = n_v H + \delta_H, W' = n_h W + \delta_W), require the same integers ((n_v, n_h, \delta_H, \delta_W)) fit all trainings. If frame thickness (t) is detected, enforce (\delta_H, \delta_W \in \{0, 2t\}) only.
+3. **Periodicity (real repetition only):** If train_out rows (or cols) have least period (p) where (2p \le \text{len(sequence)}) everywhere inside the inner region, then (p \mid H') (resp. (p \mid W')).
+   Only count (p) as a period if the pattern repeats at least twice; if (p = \text{len}), it's a sequence appearing once, not a repeating pattern.
 
-Policy:
+> **Note:** Tiling constants ((δ ∈ {0, 2t})) were removed; they are law-level (how Stage N places patterns), not S0 geometry.
 
-* 1 survivor → choose,
-* 0 → **IIS**,
-* > 1 → **AMBIGUOUS_SIZE** (return finite candidate set).
+Policy (based on unique SIZES after Π-deduplication):
 
-**Receipt S0:** Candidate set; survivors after rules 1–4; chosen size or AMBIGUOUS_SIZE.
+* 1 unique size → **OK**, choose that ((H', W')),
+* 0 sizes → **IIS**,
+* > 1 unique sizes → **AMBIGUOUS_SIZE** (return finite candidate set).
+
+Multiple families producing the same ((H', W')) count as 1 size (Π-equivalence).
+
+**Receipt S0:** Candidate families; unique sizes before screening; surviving sizes after screens 1–3; status (OK/IIS/AMBIGUOUS_SIZE); chosen ((H', W')) with all producing families (if OK).
 
 ---
 

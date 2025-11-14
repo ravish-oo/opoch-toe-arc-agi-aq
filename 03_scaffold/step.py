@@ -224,7 +224,7 @@ def _period_hints_for_output(Y: np.ndarray, inner: np.ndarray) -> Dict[str, Any]
     """
     H, W = Y.shape
 
-    # Row periods
+    # Row periods (real repetition only)
     row_periods = []
     for r in range(H):
         if inner[r, :].any():
@@ -232,7 +232,10 @@ def _period_hints_for_output(Y: np.ndarray, inner: np.ndarray) -> Dict[str, Any]
             row_vals = Y[r, inner[r, :]]
             if len(row_vals) > 0:
                 p = _least_period(row_vals)
-                if p >= 2:  # Ignore trivial period=1
+                # Only count as real period if it repeats at least twice
+                # i.e., p >= 2 AND 2*p <= len(sequence)
+                # If p == len, it's not a repeating pattern, just a sequence appearing once
+                if p >= 2 and 2 * p <= len(row_vals):
                     row_periods.append(p)
 
     # If all rows with inner cells share same period, use it
@@ -241,7 +244,7 @@ def _period_hints_for_output(Y: np.ndarray, inner: np.ndarray) -> Dict[str, Any]
     else:
         row_period = None
 
-    # Column periods
+    # Column periods (real repetition only)
     col_periods = []
     for c in range(W):
         if inner[:, c].any():
@@ -249,7 +252,10 @@ def _period_hints_for_output(Y: np.ndarray, inner: np.ndarray) -> Dict[str, Any]
             col_vals = Y[inner[:, c], c]
             if len(col_vals) > 0:
                 p = _least_period(col_vals)
-                if p >= 2:  # Ignore trivial period=1
+                # Only count as real period if it repeats at least twice
+                # i.e., p >= 2 AND 2*p <= len(sequence)
+                # If p == len, it's not a repeating pattern, just a sequence appearing once
+                if p >= 2 and 2 * p <= len(col_vals):
                     col_periods.append(p)
 
     # If all cols with inner cells share same period, use it

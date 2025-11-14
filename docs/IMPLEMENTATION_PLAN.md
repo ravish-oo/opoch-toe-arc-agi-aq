@@ -134,7 +134,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 
 **Goal:** enumerate finite size maps from training size pairs; screen with scaffold facts (train_out‑only).
 
-### WO‑3.1 Size map candidates (120–160 LOC)
+### WO‑3.1 Size map candidates (120–160 LOC) ✅ COMPLETED
 
 * Families (integer‑exact; reproduce **all** training pairs):
 

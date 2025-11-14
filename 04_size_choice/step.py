@@ -445,13 +445,192 @@ def enumerate_size_maps(canonical: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _apply_candidate_to_test_size(
+    candidate: Dict[str, Any],
+    H_test: int,
+    W_test: int
+) -> tuple:
+    """
+    Apply a size map candidate to test input size to get predicted output size.
+
+    Anchors:
+      - 00_MATH_SPEC.md §3.1: Size map families
+
+    Input:
+      candidate: from WO-3.1 with family and params
+      H_test, W_test: test input dimensions
+
+    Output:
+      (H_out_test, W_out_test): predicted test output size
+    """
+    family = candidate["family"]
+    params = candidate["params"]
+
+    if family == "identity":
+        return H_test, W_test
+
+    elif family == "swap":
+        return W_test, H_test
+
+    elif family == "factor":
+        r_H = params["r_H"]
+        r_W = params["r_W"]
+        return r_H * H_test, r_W * W_test
+
+    elif family == "affine":
+        M = params["M"]
+        b = params["b"]
+        H_out = M[0][0] * H_test + M[0][1] * W_test + b[0]
+        W_out = M[1][0] * H_test + M[1][1] * W_test + b[1]
+        return H_out, W_out
+
+    elif family == "tile":
+        n_v = params["n_v"]
+        n_h = params["n_h"]
+        delta_H = params["delta_H"]
+        delta_W = params["delta_W"]
+        return n_v * H_test + delta_H, n_h * W_test + delta_W
+
+    elif family == "constant":
+        H_const = params["H_const"]
+        W_const = params["W_const"]
+        return H_const, W_const
+
+    else:
+        raise NotImplementedError(f"Unknown size map family: {family}")
+
+
+def _passes_scaffold_screens(
+    H_out_test: int,
+    W_out_test: int,
+    scaffold: Dict[str, Any]
+) -> bool:
+    """
+    Check if candidate test size passes all scaffold-based structural screens.
+
+    Revised per A0-compatible WO-3.2:
+      - Only real repetition periods (2*p <= len)
+      - Weak feasibility (no 2*t constraint)
+      - No tiling constants (law-level, not geometry)
+      - Screens apply to sizes, not families
+
+    Anchors:
+      - 00_MATH_SPEC.md §3.2 (revised): Structural disambiguation
+
+    Screens:
+      1. Parity: midrow/midcol → odd dimension
+      2. Real periodicity: only if 2*p <= len(sequence)
+      3. Weak feasibility: H' >= h_inner_min, W' >= w_inner_min
+
+    Input:
+      H_out_test, W_out_test: candidate test output size
+      scaffold: from 03_scaffold.build
+
+    Output:
+      True if passes all screens, False otherwise
+    """
+    per_output = scaffold["per_output"]
+    aggregated = scaffold["aggregated"]
+
+    # Screen 1: Parity (midrow/midcol)
+    # If all train_out have midrow → H_out_test must be odd
+    # If all train_out have midcol → W_out_test must be odd
+    if aggregated["has_midrow_all"]:
+        if H_out_test % 2 == 0:
+            return False
+
+    if aggregated["has_midcol_all"]:
+        if W_out_test % 2 == 0:
+            return False
+
+    # Screen 2: Real periodicity (only periods with 2*p <= len)
+    # If row_period exists (and is real), H_out_test must be divisible by it
+    # If col_period exists (and is real), W_out_test must be divisible by it
+    row_period = aggregated["row_period"]
+    if row_period is not None and row_period > 0:
+        if H_out_test % row_period != 0:
+            return False
+
+    col_period = aggregated["col_period"]
+    if col_period is not None and col_period > 0:
+        if W_out_test % col_period != 0:
+            return False
+
+    # Screen 3: Weak feasibility (inner capacity, no 2*t)
+    # Require H' >= h_inner_min, W' >= w_inner_min
+    # Do NOT enforce H' >= h_inner + 2*t (that's law-level padding, not geometry)
+    h_inner_min = None
+    w_inner_min = None
+
+    for info in per_output:
+        inner = info["inner"]
+
+        if not inner.any():
+            continue  # No inner region for this output
+
+        # Get inner bounding box
+        rows, cols = np.where(inner)
+        r_min, r_max = rows.min(), rows.max()
+        c_min, c_max = cols.min(), cols.max()
+        h_inner = int(r_max - r_min + 1)
+        w_inner = int(c_max - c_min + 1)
+
+        # Track minimum inner dimensions across all outputs
+        if h_inner_min is None or h_inner < h_inner_min:
+            h_inner_min = h_inner
+        if w_inner_min is None or w_inner < w_inner_min:
+            w_inner_min = w_inner
+
+    # Apply weak feasibility if we have inner dimensions
+    if h_inner_min is not None and H_out_test < h_inner_min:
+        return False
+    if w_inner_min is not None and W_out_test < w_inner_min:
+        return False
+
+    # NOTE: Tiling constants (δ ∈ {0, 2t}) removed - that's law-level, not geometry.
+    # NOTE: Exact thickness constraints removed - padding is law-level choice.
+
+    return True
+
+
+def _select_canonical_representative(families: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Select canonical representative from Π-equivalent families.
+
+    Preference order (most preferred first):
+      1. factor - covers scaling including identity case (r=1)
+      2. affine - general linear
+      3. identity - special case
+      4. swap - dimension swap
+      5. tile - concat/tiling
+      6. constant - fallback
+
+    This ensures deterministic representative selection when multiple families
+    produce the same output size (Π-equivalent descriptions).
+    """
+    if not families:
+        raise ValueError("Cannot select representative from empty family list")
+
+    # Define preference order
+    preference = ["factor", "affine", "identity", "swap", "tile", "constant"]
+
+    # Find highest-preference family
+    for preferred_family in preference:
+        for fam in families:
+            if fam["family"] == preferred_family:
+                return fam
+
+    # Fallback: return first family (should not reach here with complete preference list)
+    return families[0]
+
+
 def choose(
     canonical: Dict[str, Any],
     scaffold: Dict[str, Any],
     trace: bool = False
 ) -> Dict[str, Any]:
     """
-    Stage: size_choice (S0) — WO-3.1: Enumerate candidates only
+    Stage: size_choice (S0) — WO-3.1 + WO-3.2
 
     Anchors:
       - 00_MATH_SPEC.md §3: Stage S0 — Output canvas size
@@ -460,46 +639,127 @@ def choose(
 
     Input:
       canonical: from 02_truth.canonicalize
-      scaffold: from 03_scaffold.build (not used in WO-3.1)
+      scaffold: from 03_scaffold.build
       trace: enable debug logging if True
 
-    Output (WO-3.1):
+    Output:
       {
-        "status": "CANDIDATES_ONLY",
-        "H_out": None,
-        "W_out": None,
+        "status": "OK" | "IIS" | "AMBIGUOUS_SIZE",
+        "H_out": int or None,
+        "W_out": int or None,
         "train_size_pairs": [...],
-        "candidates": [...]
+        "candidates": [...],
+        "survivors": [...]
       }
 
     WO-3.1: Enumerate all integer-exact size map candidates.
-    WO-3.2 will: Apply scaffold screens and choose final (H_out, W_out).
+    WO-3.2: Apply scaffold screens and choose final (H_out, W_out).
     """
     if trace:
-        logging.info("[size_choice] choose() called (WO-3.1: enumerate candidates)")
+        logging.info("[size_choice] choose() called (WO-3.1+WO-3.2: candidates + screens)")
 
-    # Enumerate candidates
+    # WO-3.1: Enumerate candidates
     size_data = enumerate_size_maps(canonical)
+    train_size_pairs = size_data["train_size_pairs"]
+    candidates = size_data["candidates"]
+
+    # WO-3.2: Get test input size (single test only)
+    test_in_list = canonical.get("test_in", [])
+    if len(test_in_list) != 1:
+        raise NotImplementedError(
+            "[size_choice] Multiple test inputs not yet supported; extend spec first."
+        )
+    H_test, W_test = test_in_list[0].shape
+
+    # WO-3.2 (Revised): Deduplicate by size, then screen sizes (not families)
+    # Step 1: Apply all candidates to test size and collect size→families mapping
+    size_to_families = {}
+
+    for cand in candidates:
+        if not cand.get("fits_all", False):
+            continue  # Paranoia: WO-3.1 should have filtered already
+
+        # Apply candidate to test input size
+        H_out_test, W_out_test = _apply_candidate_to_test_size(cand, H_test, W_test)
+
+        # Reject if invalid dimensions
+        if H_out_test <= 0 or W_out_test <= 0:
+            continue
+
+        # Deduplicate by size
+        size_key = (int(H_out_test), int(W_out_test))
+        if size_key not in size_to_families:
+            size_to_families[size_key] = []
+        size_to_families[size_key].append(cand)
+
+    # Step 2: Screen unique sizes (not families)
+    # From Π viewpoint, different families yielding same (H',W') are minted differences
+    surviving_sizes = {}  # {(H', W'): [families]}
+
+    for (H_out_test, W_out_test), families in size_to_families.items():
+        # Apply scaffold screens to the SIZE, not individual families
+        if _passes_scaffold_screens(H_out_test, W_out_test, scaffold):
+            surviving_sizes[(H_out_test, W_out_test)] = families
+
+    # Step 3: Decide status based on NUMBER OF UNIQUE SIZES
+    # 1 size → "OK"
+    # 0 sizes → "IIS"
+    # >1 sizes → "AMBIGUOUS_SIZE"
+    num_unique_sizes = len(surviving_sizes)
+
+    if num_unique_sizes == 0:
+        status = "IIS"
+        H_out = None
+        W_out = None
+    elif num_unique_sizes == 1:
+        status = "OK"
+        (H_out, W_out) = list(surviving_sizes.keys())[0]
+    else:
+        status = "AMBIGUOUS_SIZE"
+        H_out = None
+        W_out = None
+
+    # Build survivors list for output (one representative per unique size)
+    # Π-equivalence: multiple families → same size are minted differences
+    survivors = []
+    for (H_out_test, W_out_test), families in surviving_sizes.items():
+        if families:
+            # Select canonical representative using preference order
+            representative = _select_canonical_representative(families)
+            survivor = dict(representative)
+            survivor["H_out_test"] = int(H_out_test)
+            survivor["W_out_test"] = int(W_out_test)
+            survivors.append(survivor)
 
     result = {
-        "status": "CANDIDATES_ONLY",
-        "H_out": None,
-        "W_out": None,
-        "train_size_pairs": size_data["train_size_pairs"],
-        "candidates": size_data["candidates"],
+        "status": status,
+        "H_out": H_out,
+        "W_out": W_out,
+        "train_size_pairs": train_size_pairs,
+        "candidates": candidates,
+        "survivors": survivors,
     }
 
     if trace:
         num_pairs = len(result["train_size_pairs"])
         num_candidates = len(result["candidates"])
+        num_unique_sizes_before = len(size_to_families)
+        num_unique_sizes_after = len(surviving_sizes)
+        num_survivors = len(result["survivors"])
+
         logging.info(f"[size_choice] train_size_pairs: {num_pairs}")
         logging.info(f"[size_choice] candidates found: {num_candidates}")
+        logging.info(f"[size_choice] unique sizes (before screens): {num_unique_sizes_before}")
+        logging.info(f"[size_choice] unique sizes (after screens): {num_unique_sizes_after}")
+        logging.info(f"[size_choice] survivors (one representative per size): {num_survivors}")
 
-        for cand in result["candidates"]:
-            family = cand["family"]
-            params = cand["params"]
-            logging.info(f"[size_choice]   - {family}: {params}")
+        # Show surviving sizes and their Π-equivalent families
+        for (H_out_test, W_out_test), families in surviving_sizes.items():
+            family_names = [f["family"] for f in families]
+            representative = _select_canonical_representative(families)["family"]
+            logging.info(f"[size_choice]   - size {H_out_test}×{W_out_test}: {len(families)} Π-equivalent families {family_names}, canonical representative={representative}")
 
         logging.info(f"[size_choice] status={result['status']}")
+        logging.info(f"[size_choice] H_out={result['H_out']}, W_out={result['W_out']}")
 
     return result
