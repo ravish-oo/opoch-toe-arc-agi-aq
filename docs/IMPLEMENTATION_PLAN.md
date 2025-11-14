@@ -130,7 +130,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 
 ---
 
-## Milestone 3 — size_choice (test output size) 
+## Milestone 3 — size_choice (test output size) ✅ COMPLETED
 
 **Goal:** enumerate finite size maps from training size pairs; screen with scaffold facts (train_out‑only).
 
@@ -146,7 +146,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 * **Strict uniqueness policy**: do not pick one if ≥2 fit.
   **Acceptance:** lists candidates; reproductions table exact.
 
-### WO‑3.2 Screens from scaffold (80–120 LOC)
+### WO‑3.2 Screens from scaffold (80–120 LOC) ✅ COMPLETED
 
 * Use **only** scaffold facts from train_out to screen candidates for **test** size:
 

@@ -1,0 +1,92 @@
+{
+    "task_id": "46f33fce",
+    "per_output": [
+        {
+            "index": 0,
+            "H": 20,
+            "W": 20,
+            "frame_count": 76,
+            "inner_count": 324,
+            "d_top": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_left": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_right": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "has_midrow": false,
+            "has_midcol": false
+        },
+        {
+            "index": 1,
+            "H": 20,
+            "W": 20,
+            "frame_count": 76,
+            "inner_count": 324,
+            "d_top": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_left": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_right": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "has_midrow": false,
+            "has_midcol": false
+        },
+        {
+            "index": 2,
+            "H": 20,
+            "W": 20,
+            "frame_count": 76,
+            "inner_count": 324,
+            "d_top": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_left": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "d_right": {
+                "min": 0,
+                "max": 19,
+                "sum": 3800
+            },
+            "has_midrow": false,
+            "has_midcol": false
+        }
+    ]
+}

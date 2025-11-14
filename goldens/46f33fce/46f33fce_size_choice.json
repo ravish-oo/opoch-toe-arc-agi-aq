@@ -1,0 +1,86 @@
+{
+    "task_id": "46f33fce",
+    "train_size_pairs": [
+        {
+            "H_in": 10,
+            "W_in": 10,
+            "H_out": 20,
+            "W_out": 20
+        },
+        {
+            "H_in": 10,
+            "W_in": 10,
+            "H_out": 20,
+            "W_out": 20
+        },
+        {
+            "H_in": 10,
+            "W_in": 10,
+            "H_out": 20,
+            "W_out": 20
+        }
+    ],
+    "candidate_families": [
+        {
+            "kind": "factor",
+            "formula": {
+                "H_out": "r_H * H_in",
+                "W_out": "r_W * W_in"
+            },
+            "params": {
+                "r_H": 2,
+                "r_W": 2
+            },
+            "produces_size_for_test": {
+                "H_out": 20,
+                "W_out": 20
+            }
+        }
+    ],
+    "unique_sizes_before_screen": [
+        {
+            "H_out": 20,
+            "W_out": 20
+        }
+    ],
+    "screens": {
+        "train_out_only": true,
+        "checks": [
+            {
+                "name": "feasibility_inner_region",
+                "passed": true
+            },
+            {
+                "name": "parity_midrow_midcol",
+                "passed": true
+            },
+            {
+                "name": "periodicity_divides_HW",
+                "passed": true
+            }
+        ]
+    },
+    "result": {
+        "status": "OK",
+        "surviving_sizes": [
+            {
+                "H_out": 20,
+                "W_out": 20
+            }
+        ],
+        "chosen": {
+            "H_out": 20,
+            "W_out": 20,
+            "produced_by_families": [
+                {
+                    "kind": "factor",
+                    "params": {
+                        "r_H": 2,
+                        "r_W": 2
+                    }
+                }
+            ]
+        },
+        "survivor_count": 1
+    }
+}
