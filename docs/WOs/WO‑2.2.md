@@ -1,93 +1,93 @@
-## WO-2.2 — `03_scaffold`: distance atlas (≈120–180 LOC inside `build` + helpers)
+## WO-2.2 — `03_scaffold`: Distance atlas (per-output) (~120–160 LOC)
 
 **Goal:**
-Compute directional distance fields over the **canonical** test-output canvas:
+For each canonical `train_out[i]`, given its per-output `frame_maskᵢ` (outer border from WO-2.1), compute directional distance fields:
 
-* If a **frame exists** (from WO-2.1): distance to nearest frame cell,
-* Else: distance to the **outer border**,
-* Four integer fields: `d_top`, `d_bottom`, `d_left`, `d_right`,
-* Inner region in WO-2.3 will use these.
+* `d_topᵢ[r,c]`   = number of steps from `(r,c)` **upwards** (decreasing row) to reach the frame/border in that grid,
+* `d_bottomᵢ[r,c]`= steps downwards (increasing row),
+* `d_leftᵢ[r,c]`  = steps left (decreasing col),
+* `d_rightᵢ[r,c]` = steps right (increasing col),
 
-The math spec:
-
-> For each output grid X (training outputs and test canvas): build 4-adjacency graph;
-> For each cell u, compute distance to the nearest frame cell, or if no frame, to the grid border:
-> (d_{\text{top}}(u)): minimal steps in −row direction to frame/border, etc.
-
-We implement this as **directional distances along straight lines** (vertical and horizontal), which matches that definition and is simpler than a full generic BFS.
-
-**Acceptance:**
-
-* For any task:
-
-  * `d_top, d_bottom, d_left, d_right` have `min == 0`,
-  * Border cells (or frame cells when frame exists) have distance 0 in the appropriate direction,
-  * Logs show reasonable max values and a checksum.
-* For a Milestone 2 “distance golden” task from `M1_M2_checkpoints.md`, sums and extrema align with golden stats.
+with 4-adjacency (up/down/left/right). Attach these per-grid fields under `scaffold["per_output"][i]`.
 
 ---
 
-### 0. Anchors to read before coding
+## 0. Anchors to read (and how I used them)
 
-Mandatory:
+Before coding, implementer **must** re-read:
 
-1. ` @docs/anchors/00_MATH_SPEC.md `
+1. `docs/anchors/00_MATH_SPEC.md`
 
-   * §4.2 “Distance fields”: definition of `d_top, d_bottom, d_left, d_right` as directional distances to frame or border.
+   * §2: Stage A canonicalization is **per grid** on a disjoint union; canonical `(r,c)` are only meaningful within each grid. No cross-grid alignment.
+   * §4.2: “For each output grid (train_out and the test canvas size once fixed): build 4-adjacency … compute distances (d_{\text{top}},d_{\text{bottom}},d_{\text{left}},d_{\text{right}})… inner S = {p: d_* > 0}.” This is explicitly **per output grid X**.
 
-2. ` @docs/anchors/01_STAGES.md `
+2. `docs/anchors/01_STAGES.md`
 
-   * Section “scaffold”: this stage computes WHERE: frame + distances + inner region, from **train_out-only** (for structure) and applies to test canvas.
+   * “scaffold: on train_out only, find the stable canvas geometry (frame) and compute distance fields; define the inner region.” Distances are part of **output-intrinsic geometry**, not cross-grid logic.
 
-3. ` @docs/anchors/02_QUANTUM_MAPPING.md `
+3. `docs/anchors/02_QUANTUM_MAPPING.md`
 
-   * “WHERE” mapping: distances are pure geometry, no rules.
+   * Scaffold = WHERE; distance computation is in the **free sector** (no ledger), purely geometric; Stage N uses these distances as atoms for laws.
 
-4. ` @goldens/00576224/M1_M2_checkpoints.md `
+4. Author clarification you pasted
 
-   * Milestone 2 distance examples: which task_ids to use, and what distance stats (min/max/sum) we expect for sanity.
+   * Stage F is **per output grid**, with frame Fₓ chosen as the **outer border** in canonical coords; distances are to that frame/border.
+
+**How I avoided misinterpretation:**
+
+* I reconciled §2 (canonical per grid) and §4.2 (distances per grid) and explicitly **rejected** any cross-grid distance scheme.
+* I use distances purely per-grid, from the frame_mask we already defined in WO-2.1, without assuming any relationship between grids.
+* I treat §4.2’s “BFS from frame or border” as specifying the **metric** (shortest path in a 4-adj grid), not mandating a particular implementation; directional scans along rows/cols are exactly shortest path lengths along those directions on this grid.
 
 ---
 
-### 1. Libraries to use (no reinvention)
+## 1. Libraries to use
 
-Here we only need:
+We only need:
 
 * `numpy`
 
-  * For array slices and broadcasting in per-row/per-col scans.
+  * For array shape, and per-row/per-column loops.
 
 * `typing`
 
-  * `Dict`, `Any`, `List`, `Tuple`.
+  * `Dict`, `Any`, `List`.
 
 * `logging`
 
-  * For receipts of min/max/sum per distance field.
+  * For receipts (min/max/sum per distance field per output).
 
-We **do not** need:
+We **do not** use networkx or scipy here; the grid is tiny (≤30×30), and directional distances along axes are trivial to implement and mathematically equivalent to 4-adj BFS restricted to that direction.
 
-* `networkx`, `scipy.ndimage`, or a general graph library here.
-  The directional distance definition matches a simple linear scan per row/column; using a full BFS library would be overkill.
-
-The math spec gave “BFS or Dijkstra” as an implementation tip, not a requirement. Straight-line directional distances via simple passes are equivalent for our use cases (midlines, inner region, parity, etc.) and easier to implement robustly.
+No “optimization hacks”; this is just straight O(H·W) loops.
 
 ---
 
-### 2. Input & output contract (extending WO-2.1)
+## 2. Input & output contract
 
-We extend `03_scaffold.build(canonical, trace=False)`.
+After WO-2.1, `03_scaffold.build` already returns:
 
-#### Input
+```python
+scaffold = {
+    "per_output": [
+        {
+            "index": i,
+            "shape": (H_i, W_i),
+            "frame_mask": frame_mask_i,  # H_i×W_i bool, border frame for grid i
+        },
+        ...
+    ]
+}
+```
 
-From WO-2.1, `build` already receives:
+`canonical` (from Stage A) is unchanged:
 
 ```python
 canonical = {
     "task_id": str,
-    "train_in":  List[np.ndarray],  # canonical
-    "train_out": List[np.ndarray],  # canonical
-    "test_in":   List[np.ndarray],  # len == 1 (canonical)
+    "train_in":  List[np.ndarray],
+    "train_out": List[np.ndarray],   # canonical
+    "test_in":   List[np.ndarray],
     "shapes":    dict,
     "palettes":  dict,
     "graph":     ig.Graph,
@@ -96,190 +96,111 @@ canonical = {
 }
 ```
 
-And returns:
+**WO-2.2 extends `scaffold["per_output"][i]` with:**
 
 ```python
-scaffold = {
-    "frame_mask": np.ndarray[bool],     # H×W on test canvas
-    "train_out_shapes": List[(H,W)],
-    "has_frame": bool,
-    # after WO-2.2 we’ll add:
-    "d_top":    np.ndarray[int],
-    "d_bottom": np.ndarray[int],
-    "d_left":   np.ndarray[int],
-    "d_right":  np.ndarray[int],
+{
+  "d_top":    np.ndarray[int],  # H_i×W_i
+  "d_bottom": np.ndarray[int],
+  "d_left":   np.ndarray[int],
+  "d_right":  np.ndarray[int],
 }
 ```
 
-We assume the **reference shape** for distances is:
-
-* The canonical shape of the **test output canvas**, which for now matches the canonical test input shape, since S0 is not yet applied. Later, S0 will define `(H_out, W_out)`, but the same directional logic applies.
-
-Implementation-wise, at this WO we can:
-
-* Use `H,W = canonical["test_in"][0].shape` as the grid size for distances, and
-* Restrict the frame mask to this size (if needed). For typical ARC tasks, `train_out` shapes match the intended test output shape.
+We do **not** change the structure of `scaffold["per_output"]`; we only add fields.
 
 ---
 
-### 3. Distance fields: precise algorithm
+## 3. Directional distance definition (strict, per grid)
 
-We define directional distances along lines:
+Given:
 
-* `d_top[r,c]`: number of steps to go **upwards** (decreasing row index) until hitting a frame cell (if `has_frame=True`) or the outer border row (`r == 0`) if no frame.
-* `d_bottom[r,c]`: steps **downwards** (increasing row index) until hitting frame or bottom border (`r == H-1` if no frame).
-* `d_left[r,c]`: steps **left** until frame or `c == 0` (no frame).
-* `d_right[r,c]`: steps **right** until frame or `c == W-1` (no frame).
+* A canonical output grid `Y_i` of shape `(H, W)`,
+* Its frame_maskᵢ marking the outer border (from WO-2.1),
 
-Concrete rules:
+we define for each cell `(r,c)`:
 
-* If `has_frame=True`:
+* `d_top[r,c]`   = minimal number of steps to reach the frame in the **upward** direction alone (moving `(r−1,c)` each step) until we hit frame or the border,
+* `d_bottom[r,c]`= minimal steps downward, `(r+1,c)`,
+* `d_left[r,c]`  = minimal steps left, `(r,c−1)`,
+* `d_right[r,c]` = minimal steps right, `(r,c+1)`.
 
-  * A cell `(r,c)` that is itself in `frame_mask` has all distances 0.
-  * For cells above the topmost frame in their column, `d_top` will be the number of steps to reach the first frame cell upwards.
-  * If there is no frame cell in that direction for that column, we treat the border as “blocking”; distances still measure steps until leaving the grid (but in practice we won’t rely on such cells for midline/inner).
+Because frame_mask marks exactly the border, this simplifies to:
 
-* If `has_frame=False`:
+* If `frame_mask[r,c]` is True, all four distances are 0 there (we’re at the frame),
+* Else:
 
-  * Distances are to **borders only**:
+  * `d_top[r,c]`   = number of cells between `(r,c)` and the top border along column `c`,
+  * `d_bottom[r,c]`= number of cells between `(r,c)` and the bottom border,
+  * `d_left[r,c]`  = number of cells between `(r,c)` and the left border,
+  * `d_right[r,c]` = number of cells between `(r,c)` and the right border.
 
-    * `d_top[r,c] = r`,
-    * `d_bottom[r,c] = H-1 - r`,
-    * `d_left[r,c] = c`,
-    * `d_right[r,c] = W-1 - c`.
+Which yields the simple formulas:
 
-Implementation using simple scans:
+* For any `(r,c)` within the grid (H,W ≥ 1):
 
-#### Case A: no frame
+  ```python
+  d_top[r,c]    = r
+  d_bottom[r,c] = (H - 1) - r
+  d_left[r,c]   = c
+  d_right[r,c]  = (W - 1) - c
+  ```
 
-Easy vectorized formulas above.
+These are exactly shortest path distances along each axis on a 4-adj grid with border frame. They match §4.2’s “distances via BFS” metric; we’re using closed-form 1D BFS along rows/cols.
 
-#### Case B: frame exists
-
-We do four passes:
-
-* Top-down (for `d_top`)
-* Bottom-up (for `d_bottom`)
-* Left-right (for `d_left`)
-* Right-left (for `d_right`)
-
-Example for `d_top`:
-
-```python
-d_top = np.zeros((H, W), dtype=int)
-for c in range(W):
-    dist = 0
-    for r in range(H):
-        if frame_mask[r, c]:
-            dist = 0
-        elif r == 0 and not frame_mask[r, c]:
-            dist = 0  # at border; spec uses frame or border
-        else:
-            dist += 1
-        d_top[r, c] = dist
-```
-
-We can tweak edge behavior slightly, but the idea remains: if frame exists, distances reset to 0 at frame cells; otherwise border cells have 0 (ensuring `min == 0` on all fields).
-
-Same pattern for `d_bottom` (scan from bottom), `d_left` (from left), `d_right` (from right).
+No cross-grid logic; everything is per `Y_i`.
 
 ---
 
-### 4. Implementation sketch in `03_scaffold/step.py`
+## 4. Implementation sketch in `03_scaffold/step.py`
 
-Extend the previous `build` to include distances:
+We extend the existing `build` (from WO-2.1) to add distances.
 
 ```python
-# 03_scaffold/step.py
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 import logging
 
 import numpy as np
 
-def _detect_frame(train_out: List[np.ndarray], trace: bool = False):
-    # As in WO-2.1
-    shapes = [g.shape for g in train_out]
-    unique_shapes = sorted(set(shapes))
-    H, W = unique_shapes[0]
-    stack = np.stack(train_out, axis=0)
-    base = stack[0]
-    equal_all = np.all(stack == base, axis=0)
-    frame_mask = equal_all.astype(bool)
-    return frame_mask, shapes
+def _frame_for_output(Y: np.ndarray) -> np.ndarray:
+    # From WO-2.1: outer border frame
+    H, W = Y.shape
+    frame = np.zeros((H, W), dtype=bool)
+    if H == 0 or W == 0:
+        return frame
+    frame[0, :] = True
+    frame[H - 1, :] = True
+    frame[:, 0] = True
+    frame[:, W - 1] = True
+    return frame
 
-def _distance_fields(frame_mask: np.ndarray, has_frame: bool) -> Dict[str, np.ndarray]:
-    H, W = frame_mask.shape
+def _distance_fields_for_output(H: int, W: int, frame_mask: np.ndarray) -> Dict[str, np.ndarray]:
+    """
+    Directional distance fields per-grid, as shortest path lengths along
+    each axis to the border frame.
 
+    We use the closed-form for the border frame:
+      d_top[r,c]    = r
+      d_bottom[r,c] = H-1 - r
+      d_left[r,c]   = c
+      d_right[r,c]  = W-1 - c
+
+    For frame cells (border), these naturally give 0. This matches the
+    BFS-on-4-neighbor-grid metric in this special case.
+    """
     d_top    = np.zeros((H, W), dtype=int)
     d_bottom = np.zeros((H, W), dtype=int)
     d_left   = np.zeros((H, W), dtype=int)
     d_right  = np.zeros((H, W), dtype=int)
 
-    if not has_frame:
-        # Distances to borders only
-        for r in range(H):
-            for c in range(W):
-                d_top[r, c]    = r
-                d_bottom[r, c] = H - 1 - r
-                d_left[r, c]   = c
-                d_right[r, c]  = W - 1 - c
-        return {
-            "d_top": d_top,
-            "d_bottom": d_bottom,
-            "d_left": d_left,
-            "d_right": d_right,
-        }
-
-    # With frame: reset distances to 0 at frame cells; otherwise count steps to frame/border.
-
-    # Top-down
-    for c in range(W):
-        dist = 0
-        for r in range(H):
-            if frame_mask[r, c]:
-                dist = 0
-            elif r == 0:
-                dist = 0  # border
-            else:
-                dist += 1
-            d_top[r, c] = dist
-
-    # Bottom-up
-    for c in range(W):
-        dist = 0
-        for r in reversed(range(H)):
-            if frame_mask[r, c]:
-                dist = 0
-            elif r == H - 1:
-                dist = 0
-            else:
-                dist += 1
-            d_bottom[r, c] = dist
-
-    # Left-right
     for r in range(H):
-        dist = 0
         for c in range(W):
-            if frame_mask[r, c]:
-                dist = 0
-            elif c == 0:
-                dist = 0
-            else:
-                dist += 1
-            d_left[r, c] = dist
+            d_top[r, c]    = r
+            d_bottom[r, c] = (H - 1) - r
+            d_left[r, c]   = c
+            d_right[r, c]  = (W - 1) - c
 
-    # Right-left
-    for r in range(H):
-        dist = 0
-        for c in reversed(range(W)):
-            if frame_mask[r, c]:
-                dist = 0
-            elif c == W - 1:
-                dist = 0
-            else:
-                dist += 1
-            d_right[r, c] = dist
-
+    # We do not need to special-case frame_mask; border cells already get 0.
     return {
         "d_top": d_top,
         "d_bottom": d_bottom,
@@ -289,166 +210,160 @@ def _distance_fields(frame_mask: np.ndarray, has_frame: bool) -> Dict[str, np.nd
 
 def build(canonical: Dict[str, Any], trace: bool = False) -> Dict[str, Any]:
     """
-    Stage: scaffold (WHERE) — frame + distances (WO-2.1 + WO-2.2)
-    Anchor:
-      - 01_STAGES.md: scaffold
-      - 00_MATH_SPEC.md §4.1-4.2: Frame & distance fields
-      - 02_QUANTUM_MAPPING.md: WHERE = output-intrinsic geometry
+    Stage: scaffold (WHERE) — WO-2.1+WO-2.2
+
+    Now includes per-output frame_mask (border) and per-output directional
+    distance fields.
 
     Input:
       canonical: from 02_truth.canonicalize
 
     Output:
       scaffold: {
-        "frame_mask": np.ndarray[bool],
-        "train_out_shapes": List[(H,W)],
-        "has_frame": bool,
-        "d_top": np.ndarray[int],
-        "d_bottom": np.ndarray[int],
-        "d_left": np.ndarray[int],
-        "d_right": np.ndarray[int],
+        "per_output": [
+          {
+            "index": i,
+            "shape": (H_i, W_i),
+            "frame_mask": H_i×W_i bool,
+            "d_top":    H_i×W_i int,
+            "d_bottom": H_i×W_i int,
+            "d_left":   H_i×W_i int,
+            "d_right":  H_i×W_i int,
+          },
+          ...
+        ]
       }
     """
-    train_out = canonical["train_out"]  # canonical grids
-    frame_mask, shapes = _detect_frame(train_out, trace=trace)
-    has_frame = bool(frame_mask.any())
+    train_out: List[np.ndarray] = canonical["train_out"]
+    if not train_out:
+        msg = "[scaffold] No train_out grids; scaffold undefined."
+        if trace:
+            logging.error(msg)
+        raise ValueError(msg)
 
-    distances = _distance_fields(frame_mask, has_frame)
+    per_output: List[Dict[str, Any]] = []
+    for i, Y in enumerate(train_out):
+        H, W = Y.shape
+        frame_mask = _frame_for_output(Y)
+        distances = _distance_fields_for_output(H, W, frame_mask)
 
-    scaffold = {
-        "frame_mask": frame_mask,
-        "train_out_shapes": shapes,
-        "has_frame": has_frame,
-        "d_top": distances["d_top"],
-        "d_bottom": distances["d_bottom"],
-        "d_left": distances["d_left"],
-        "d_right": distances["d_right"],
-    }
+        entry: Dict[str, Any] = {
+            "index": i,
+            "shape": (H, W),
+            "frame_mask": frame_mask,
+            "d_top":    distances["d_top"],
+            "d_bottom": distances["d_bottom"],
+            "d_left":   distances["d_left"],
+            "d_right":  distances["d_right"],
+        }
 
-    if trace:
-        H, W = frame_mask.shape
-        logging.info(
-            f"[scaffold] frame_mask shape={frame_mask.shape}, "
-            f"sum={int(frame_mask.sum())}, has_frame={has_frame}"
-        )
-        for name in ["d_top", "d_bottom", "d_left", "d_right"]:
-            D = distances[name]
+        if trace:
             logging.info(
-                f"[scaffold] {name}: shape={D.shape}, min={int(D.min())}, "
-                f"max={int(D.max())}, sum={int(D.sum())}"
+                f"[scaffold] output#{i}: shape={entry['shape']}, "
+                f"frame_sum={int(frame_mask.sum())}"
             )
+            for name in ["d_top", "d_bottom", "d_left", "d_right"]:
+                D = entry[name]
+                logging.info(
+                    f"[scaffold] output#{i} {name}: "
+                    f"min={int(D.min())}, max={int(D.max())}, sum={int(D.sum())}"
+                )
+
+        per_output.append(entry)
+
+    scaffold: Dict[str, Any] = {
+        "per_output": per_output,
+    }
 
     return scaffold
 ```
 
-This integrates WO-2.1 and WO-2.2. If you prefer to keep WOs separate, `_distance_fields` can be added in WO-2.2 into the existing `build`.
+We’ve now fully implemented WO-2.1 + WO-2.2 per the clarified spec; WO-2.3 will add `inner`, parity, thickness, periods on top of these.
 
 ---
 
-### 5. `run.py` behavior & changes
+## 5. `run.py` changes
 
-No changes to `run.py` are needed:
+No changes.
 
-```python
-scaffold  = build_scaffold(canonical, trace=trace)
+* `run.py` still only calls:
+
+  ```python
+  scaffold = build_scaffold(canonical, trace=trace)
+  ```
+
+* It doesn’t need to know or change anything for WO-2.2; integration for later WOs remains trivial.
+
+---
+
+## 6. Receipts for WO-2.2
+
+With `--trace`, for each `train_out[i]` you get logs:
+
+```text
+[scaffold] output#0: shape=(H0, W0), frame_sum=...
+[scaffold] output#0 d_top:    min=0, max=..., sum=...
+[scaffold] output#0 d_bottom: min=0, max=..., sum=...
+[scaffold] output#0 d_left:   min=0, max=..., sum=...
+[scaffold] output#0 d_right:  min=0, max=..., sum=...
+...
 ```
 
-Now `build_scaffold` returns `scaffold` with distances included. The pipeline then proceeds to `size_choice` (still unimplemented).
+For each grid:
 
-`run.py` remains a minimal orchestrator.
+* `d_*` **min must be 0** (at border/frame cells),
+* `max` equals:
 
----
+  * `d_top`: `H-1`, `d_bottom`: `H-1`, `d_left`: `W-1`, `d_right`: `W-1`,
+* `sum` must match closed-form sums if you want to verify them numerically.
 
-### 6. Receipts for WO-2.2
+Reviewer can use these receipts to:
 
-Under `--trace`, `build` logs:
-
-* `frame_mask` stats (from WO-2.1),
-* For each distance field (`d_top`, `d_bottom`, `d_left`, `d_right`):
-
-  * `shape`,
-  * `min`, `max`,
-  * `sum`.
-
-Reviewer can check:
-
-* `min` must be 0 for all four fields,
-* For a no-frame case:
-
-  * `d_top[r, c] == r`,
-  * `d_bottom[r, c] == H-1-r`, etc. (the sums should match known formulas; golden may give reference sums),
-* For a frame case:
-
-  * All frame cells `frame_mask == True` should have 0 in all four directions,
-  * As you move away from frame/border, distances increase monotonically along lines.
+* Confirm distances are correct per grid,
+* Confirm there’s no cross-grid mixing.
 
 ---
 
-### 7. Reviewer instructions (WO-2.2 checkpoint)
+## 7. Reviewer instructions
 
-**Commands:**
+Run for a few tasks:
 
-1. A border-frame task (from `M1_M2_checkpoints.md`):
+```bash
+python run.py --task-id 00576224 \
+              --data data/arc-agi_training_challenges.json \
+              --test-index 0 \
+              --trace
 
-   ```bash
-   python run.py --task-id <frame_task_id> \
-                 --data data/arc-agi_training_challenges.json \
-                 --test-index 0 \
-                 --trace
-   ```
+python run.py --task-id 5e6bbc0b \
+              --data data/arc-agi_training_challenges.json \
+              --test-index 0 \
+              --trace
 
-2. A task with no stable frame (like `00576224`):
+python run.py --task-id 833966f4 \
+              --data data/arc-agi_training_challenges.json \
+              --test-index 0 \
+              --trace
+```
 
-   ```bash
-   python run.py --task-id 00576224 \
-                 --data data/arc-agi_training_challenges.json \
-                 --test-index 0 \
-                 --trace
-   ```
+**Expected:**
 
-**Expected behavior:**
+* For each `train_out` grid:
 
-* For the border-frame task:
+  * shapes printed are correct canonical shapes,
+  * frame_sum equals border size (`2*H + 2*(W-2)` if H,W≥2),
+  * all four distance fields have `min=0`, `max` values as per formulas.
 
-  * `frame_mask.sum() > 0`, `has_frame=True`.
-  * For all four distance fields:
+**Legit implementation:**
 
-    * `min == 0`,
-    * logged `max` and `sum` match the rough golden stats in `M1_M2_checkpoints.md` (or at least are plausible).
-  * Pipeline then hits `NotImplementedError` at `size_choice.choose`.
+* Distances match formulas; no cross-grid dependency; logs match expected min/max/sum.
 
-* For `00576224`:
+**Unsatisfiable / spec gap:**
 
-  * `frame_mask.sum()` may be 0, `has_frame=False`.
-  * Distances should match the simple border formulas:
+* There is none for distances; per-grid border exists for any H,W≥1, so distances are always well-defined.
 
-    * For 6×6, `d_top` min=0, max=5, sum = 0+1+2+3+4+5 repeated across columns, etc.
-  * Again, pipeline stops at `size_choice`.
+**Bug:**
 
-**Legit gap vs bug:**
-
-* **Legit gap:**
-
-  * Distances logged as described,
-  * `size_choice` still unimplemented.
-
-* **Bug:**
-
-  * `min` of any distance field ≠ 0,
-  * `shape` of distance fields does not match the grid size,
-  * `frame_mask` ignored (distances non-zero at frame cells),
-  * Using `train_in` or `test_in` instead of `train_out` for frame + distances, diverging from spec.
-
-**Math/implementation alignment:**
-
-* Distances must be computed on the canonical grid and respect the directional definition (up/down/left/right to frame/border).
-
----
-
-### 8. Optimization / CPU considerations
-
-* Grids are ≤ 30×30; four O(H·W) passes are negligible on CPU.
-* No heaps, no Dijkstra; no need to call external graph libs.
-* This is exact and simple; no reason to approximate or simplify.
+* If any `d_*` have `min>0` or do not follow the expected pattern,
+* If any grid’s distances depend on other grids (e.g., mixing shapes).
 
 ---
