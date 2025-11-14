@@ -112,27 +112,25 @@ arc_cognition/
 
 ---
 
-Yep, let’s rewrite Milestone 2 at the new “correct” level.
-
-## Milestone 2 — scaffold (WHERE) on train_out
+## Milestone 2 — scaffold (WHERE) on train_out ✅ COMPLETED
 
 **Goal:** Build the output-intrinsic scaffold for each training output grid: frame (canvas border), distance atlas, and inner region, plus simple global hints for S0.
 
-### WO-2.1 Frame detector (per-output, border-based)
+### WO-2.1 Frame detector (per-output, border-based) ✅ COMPLETED
 
 For each canonical `train_out[i]`, compute a **frame_maskᵢ** that marks the **outer border** of that grid (top/bottom rows and left/right columns). Store these as `scaffold["per_output"][i]["frame_mask"]` along with each grid’s `(Hᵢ,Wᵢ)`.
 
-### WO-2.2 Distance atlas via BFS / directional scan (per-output)
+### WO-2.2 Distance atlas via BFS / directional scan (per-output) ✅ COMPLETED
 
 For each `train_out[i]`, build 4-adjacency on its cells and compute directional distance fields `d_topᵢ, d_bottomᵢ, d_leftᵢ, d_rightᵢ` from its own frame_maskᵢ (or border if needed). Attach these fields under `scaffold["per_output"][i]`; verify `min=0` and monotone behavior along rows/cols.
 
-### WO-2.3 Inner region & global facts (per-output + aggregated)
+### WO-2.3 Inner region & global facts (per-output + aggregated) ✅ COMPLETED
 
 For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_leftᵢ>0)&(d_rightᵢ>0)`, and compute local parity flags (`has_midrowᵢ/has_midcolᵢ`), thickness candidates (min ring width from inner to frame), and simple row/col period hints inside `innerᵢ`. Then combine these into `scaffold["aggregated"]` (global thickness_min, row_period, col_period, has_midrow_all, has_midcol_all) to be used later by S0.
 
 ---
 
-## Milestone 3 — size_choice (test output size) (≤280 LOC)
+## Milestone 3 — size_choice (test output size) 
 
 **Goal:** enumerate finite size maps from training size pairs; screen with scaffold facts (train_out‑only).
 
