@@ -183,7 +183,10 @@ All computed in canonical coords.
 
 * Per‑color pixel counts; per‑color component counts.
 * Palette present/missing; most/least frequent color(s).
-* Input↔output color permutation (bijective) & cyclic class over active palette.
+* Input↔output color mapping (bijective when consistent):
+  * **Case A (K_in == K_out):** True permutation on a single set → compute cycle decomposition (gauge transformation, Π-equivalent relabeling).
+  * **Case B (K_in ≠ K_out):** Bijective mapping between disjoint palettes → cycles NOT defined (real content transformation, not gauge).
+  * Return fields: `has_bijection` (bool), `is_permutation` (bool, true only for Case A), `perm` & `cycles` (Case A only), `color_mapping` (Case B only).
 
 **F. Input features (guardrail)**
 

@@ -11,13 +11,15 @@ import logging
 from .atoms import (
     compute_A_atoms, trace_A_atoms,
     compute_B_atoms, trace_B_atoms,
-    compute_C_atoms, trace_C_atoms
+    compute_C_atoms, trace_C_atoms,
+    compute_D_atoms, compute_E_atoms_for_grid,
+    compute_global_palette_mapping, trace_D_E_atoms
 )
 
 
 def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> Any:
     """
-    Stage: laws (N) — WO-4.1 + WO-4.2 + WO-4.3: compute A+B+C atoms for train_out
+    Stage: laws (N) — WO-4.1/4.2/4.3/4.4: compute A+B+C+D+E atoms for train_out
 
     Anchor:
       - 01_STAGES.md: laws
@@ -32,16 +34,19 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
 
     Output:
       Invariants object encoding fixes, equalities, forbids, etc.
-      For WO-4.1+4.2+4.3: returns A+B+C atoms for each train_out; mining not yet implemented.
+      For WO-4.1/4.2/4.3/4.4: returns A+B+C+D+E atoms for each train_out;
+      mining not yet implemented.
     """
     if trace:
-        logging.info("[laws] mine() called (WO-4.1+WO-4.2+WO-4.3: A+B+C atoms)")
+        logging.info("[laws] mine() called (WO-4.1/4.2/4.3/4.4: A+B+C+D+E atoms)")
 
-    # WO-4.1+4.2+4.3: Compute A+B+C atoms for each train_out
-    # Later WOs will add D–G atoms and actual invariant mining
+    # WO-4.1/4.2/4.3/4.4: Compute A+B+C+D+E atoms for each train_out
+    # Later WOs will add F–G atoms and actual invariant mining
     train_out_A_atoms: List[Dict[str, Any]] = []
     train_out_B_atoms: List[Dict[str, Any]] = []
     train_out_C_atoms: List[Dict[str, Any]] = []
+    train_out_D_atoms: List[Dict[str, Any]] = []
+    train_out_E_atoms: List[Dict[str, Any]] = []
 
     per_output = scaffold["per_output"]
     train_out_grids = canonical["train_out"]
@@ -62,6 +67,14 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
         C_atoms = compute_C_atoms(grid, scaffold_info)
         train_out_C_atoms.append(C_atoms)
 
+        # WO-4.4: Compute D-atoms for this train_out grid
+        D_atoms = compute_D_atoms(grid)
+        train_out_D_atoms.append(D_atoms)
+
+        # WO-4.4: Compute E-atoms for this train_out grid
+        E_atoms = compute_E_atoms_for_grid(grid, C_atoms)
+        train_out_E_atoms.append(E_atoms)
+
         # Trace for first grid if requested
         if trace and i == 0:
             logging.info(f"[laws] train_out#{i} A-atoms:")
@@ -70,17 +83,30 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
             trace_B_atoms(B_atoms, grid)
             logging.info(f"[laws] train_out#{i} C-atoms:")
             trace_C_atoms(C_atoms, grid)
+            logging.info(f"[laws] train_out#{i} D+E-atoms:")
+            trace_D_E_atoms(D_atoms, E_atoms, grid)
 
-    # WO-4.1+4.2+4.3: Return partial result (just A+B+C atoms)
+    # WO-4.4: Compute task-level global palette mapping
+    train_in_grids = canonical["train_in"]
+    global_palette_mapping = compute_global_palette_mapping(train_in_grids, train_out_grids)
+
+    if trace:
+        logging.info("[laws] Global palette mapping:")
+        trace_D_E_atoms({}, {}, train_out_grids[0], global_map=global_palette_mapping)
+
+    # WO-4.1/4.2/4.3/4.4: Return partial result (just A+B+C+D+E atoms)
     # Later WOs will compute test_out atoms and mine invariants
     result = {
         "train_out_A_atoms": train_out_A_atoms,
         "train_out_B_atoms": train_out_B_atoms,
         "train_out_C_atoms": train_out_C_atoms,
+        "train_out_D_atoms": train_out_D_atoms,
+        "train_out_E_atoms": train_out_E_atoms,
+        "global_palette_mapping": global_palette_mapping,
         "invariants": None,  # Not yet implemented
     }
 
     if trace:
-        logging.info(f"[laws] computed A+B+C atoms for {len(train_out_A_atoms)} train_out grids")
+        logging.info(f"[laws] computed A+B+C+D+E atoms for {len(train_out_A_atoms)} train_out grids")
 
     return result

@@ -8,6 +8,7 @@ Implements:
   - WO-4.1: A-atoms (coordinates & distances)
   - WO-4.2: B-atoms (local texture)
   - WO-4.3: C-atoms (connectivity & shape)
+  - WO-4.4: D-atoms (repetition & tiling) + E-atoms (palette/global)
 """
 
 import numpy as np
@@ -590,3 +591,391 @@ def trace_C_atoms(C_atoms: Dict[str, Any], grid: np.ndarray) -> None:
             print(f"    perimeters_4: {perims}")
             print(f"    area_ranks: {ranks}")
             print(f"    ring_thickness_class: {rings}")
+
+
+# ========== WO-4.4: D-atoms (Repetition & tiling) ==========
+
+
+def _least_period_1d(seq: np.ndarray) -> int:
+    """
+    Return smallest p (1 <= p <= L) such that seq is p-periodic.
+
+    A sequence is p-periodic if seq[i] == seq[i+p] for all valid i.
+    Equivalently: seq[:-p] == seq[p:].
+
+    This is the RAW least period; S0 (size_choice) applies its own
+    "real repetition" filter (2p <= L) when aggregating.
+
+    Anchor:
+      - 00_MATH_SPEC.md §5.1 D: Minimal period along row/col (≤ dimension)
+    """
+    L = len(seq)
+    for p in range(1, L + 1):
+        if p == L:
+            # Full length is always a valid period
+            return L
+        # Check if seq is p-periodic: seq[:-p] == seq[p:]
+        if np.array_equal(seq[:-p], seq[p:]):
+            return p
+    # Should never reach here due to p==L case above
+    return L
+
+
+def compute_D_atoms(grid: np.ndarray) -> Dict[str, Any]:
+    """
+    Compute D-atoms (repetition & tiling) for a single output grid.
+
+    Anchor:
+      - 00_MATH_SPEC.md §5.1 D: Repetition & tiling
+
+    Input:
+      grid: np.ndarray[(H,W)] with colors 0..9 in canonical coords
+
+    Output:
+      Dict containing:
+        - row_periods: np.ndarray[(H,), int] - minimal period for each row
+        - col_periods: np.ndarray[(W,), int] - minimal period for each column
+        - tiling_flags: Dict[(b_r, b_c), bool] - True if grid is exactly tiled
+          by b_r×b_c blocks, where b_r divides H and b_c divides W
+    """
+    H, W = grid.shape
+
+    # ========== 3.1 Minimal row / column periods ==========
+    row_periods = np.zeros(H, dtype=int)
+    col_periods = np.zeros(W, dtype=int)
+
+    for r in range(H):
+        row_periods[r] = _least_period_1d(grid[r, :])
+
+    for c in range(W):
+        col_periods[c] = _least_period_1d(grid[:, c])
+
+    # ========== 3.2 2D tiling flags for factor pairs ==========
+    # Compute divisors of H and W
+    div_H = [d for d in range(1, H + 1) if H % d == 0]
+    div_W = [d for d in range(1, W + 1) if W % d == 0]
+
+    tiling_flags = {}
+
+    for b_r in div_H:
+        for b_c in div_W:
+            # Extract canonical tile at top-left (0,0)
+            tile = grid[0:b_r, 0:b_c].copy()
+
+            # Check if all blocks match this tile
+            ok = True
+            for r0 in range(0, H, b_r):
+                if not ok:
+                    break
+                for c0 in range(0, W, b_c):
+                    block = grid[r0:r0 + b_r, c0:c0 + b_c]
+                    if not np.array_equal(block, tile):
+                        ok = False
+                        break
+
+            tiling_flags[(b_r, b_c)] = ok
+
+    # ========== Return D-atoms dict ==========
+    return {
+        "row_periods": row_periods,
+        "col_periods": col_periods,
+        "tiling_flags": tiling_flags,
+    }
+
+
+# ========== WO-4.4: E-atoms (Palette/global) ==========
+
+
+def compute_E_atoms_for_grid(
+    grid: np.ndarray,
+    C_atoms: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Compute E-atoms (palette/global) for a single output grid.
+
+    Anchor:
+      - 00_MATH_SPEC.md §5.1 E: Palette/global
+
+    Input:
+      grid: np.ndarray[(H,W)] with colors 0..9 in canonical coords
+      C_atoms: optional C-atoms dict from compute_C_atoms (to reuse component counts)
+
+    Output:
+      Dict containing:
+        - pixel_counts: np.ndarray[10, int] - count of each color 0..9
+        - component_counts: Dict[int, int] - per-color component count
+        - palette: List[int] - colors present (count > 0)
+        - missing: List[int] - colors absent (count == 0)
+        - most_frequent: List[int] - ALL colors achieving max count (>0)
+        - least_frequent: List[int] - ALL colors achieving min positive count
+    """
+    # ========== 4.1 Per-color pixel counts ==========
+    flat = grid.ravel()
+    counts = np.bincount(flat, minlength=10)  # length 10, counts[k] = # pixels of color k
+
+    # ========== 4.2 Palette present/missing ==========
+    palette = [k for k in range(10) if counts[k] > 0]
+    missing = [k for k in range(10) if counts[k] == 0]
+
+    # ========== 4.3 Most/least frequent colors ==========
+    # Most frequent: ALL colors achieving max count (>0)
+    if len(palette) > 0:
+        max_count = counts.max()
+        most_frequent = [k for k in range(10) if counts[k] == max_count and counts[k] > 0]
+    else:
+        most_frequent = []
+
+    # Least frequent: ALL colors achieving min positive count
+    positive_counts = [(k, counts[k]) for k in range(10) if counts[k] > 0]
+    if positive_counts:
+        min_pos = min(c for k, c in positive_counts)
+        least_frequent = [k for k, c in positive_counts if c == min_pos]
+    else:
+        least_frequent = []
+
+    # ========== 4.4 Per-color component counts ==========
+    # Reuse from C_atoms if available, else recompute
+    if C_atoms is not None and "components" in C_atoms:
+        component_counts = {k: len(C_atoms["components"].get(k, [])) for k in range(10)}
+    else:
+        # Recompute via ndimage.label
+        component_counts = {}
+        structure_4 = np.array([[0, 1, 0],
+                                [1, 1, 1],
+                                [0, 1, 0]], dtype=int)
+        for k in range(10):
+            mask = (grid == k).astype(np.uint8)
+            if mask.any():
+                _, num_features = ndimage.label(mask, structure=structure_4)
+                component_counts[k] = int(num_features)
+            else:
+                component_counts[k] = 0
+
+    # ========== Return E-atoms dict ==========
+    return {
+        "pixel_counts": counts,
+        "component_counts": component_counts,
+        "palette": palette,
+        "missing": missing,
+        "most_frequent": most_frequent,
+        "least_frequent": least_frequent,
+    }
+
+
+def compute_global_palette_mapping(
+    train_in: List[np.ndarray],
+    train_out: List[np.ndarray]
+) -> Dict[str, Any]:
+    """
+    Compute task-level input↔output color mapping.
+
+    Anchor:
+      - 00_MATH_SPEC.md §5.1 E: Input↔output color permutation (bijective)
+        & cyclic class over active palette
+
+    Distinguishes two cases:
+
+    Case A — True color permutation (gauge):
+      - K_in == K_out (same palette)
+      - f: K → K is a bijection on one set
+      - Cycles ARE defined (permutation on single set)
+      - This is gauge transformation (relabeling)
+
+    Case B — Disjoint palettes (non-gauge color mapping):
+      - K_in ≠ K_out (different palettes)
+      - f: K_in → K_out is bijective but acts on two different sets
+      - Cycles are NOT defined (no single set to permute)
+      - This is real content transformation (not gauge)
+
+    Input:
+      train_in: list of input grids (canonical coords)
+      train_out: list of output grids (canonical coords)
+
+    Output:
+      Dict containing:
+        - has_bijection: bool - True if a consistent bijection exists
+        - is_permutation: bool - True only if K_in == K_out (Case A)
+        - perm: Dict[int, int] or None - only for Case A (true permutation)
+        - cycles: List[List[int]] or None - only for Case A (cycle decomposition)
+        - color_mapping: Dict[int, int] or None - only for Case B (disjoint palettes)
+
+    Algorithm:
+      1. For each train pair, check cell-by-cell if shapes match
+      2. Build forward (cin -> cout) and reverse (cout -> cin) dicts
+      3. Check consistency: each cin maps to exactly one cout, and vice versa
+      4. If K_in == K_out: Case A (permutation + cycles)
+      5. If K_in ≠ K_out: Case B (color_mapping, no cycles)
+    """
+    if len(train_in) != len(train_out):
+        # Spec doesn't cover this case; fail loudly
+        raise ValueError(
+            f"train_in and train_out lengths mismatch: "
+            f"{len(train_in)} != {len(train_out)}"
+        )
+
+    fwd = {}  # color_in -> color_out
+    rev = {}  # color_out -> color_in
+    consistent = True
+
+    for i in range(len(train_in)):
+        gi = train_in[i]
+        go = train_out[i]
+
+        # Check if shapes match for position-wise mapping
+        if gi.shape != go.shape:
+            # Cannot do position-wise mapping; no bijection possible
+            consistent = False
+            break
+
+        # Flatten and check cell-by-cell
+        gi_flat = gi.ravel()
+        go_flat = go.ravel()
+
+        for cin, cout in zip(gi_flat, go_flat):
+            cin = int(cin)
+            cout = int(cout)
+
+            # Check forward consistency
+            if cin in fwd:
+                if fwd[cin] != cout:
+                    consistent = False
+                    break
+            else:
+                fwd[cin] = cout
+
+            # Check reverse consistency (for bijectivity)
+            if cout in rev:
+                if rev[cout] != cin:
+                    consistent = False
+                    break
+            else:
+                rev[cout] = cin
+
+        if not consistent:
+            break
+
+    if not consistent:
+        return {
+            "has_bijection": False,
+            "is_permutation": False,
+            "perm": None,
+            "cycles": None,
+            "color_mapping": None,
+        }
+
+    # Check bijectivity on active palettes
+    palette_in = sorted(fwd.keys())
+    palette_out = sorted(rev.keys())
+
+    # For bijection: |palette_in| == |palette_out|
+    if len(palette_in) != len(palette_out):
+        return {
+            "has_bijection": False,
+            "is_permutation": False,
+            "perm": None,
+            "cycles": None,
+            "color_mapping": None,
+        }
+
+    # ========== Distinguish Case A vs Case B ==========
+    # Case A: True permutation (K_in == K_out)
+    # Case B: Disjoint palettes (K_in ≠ K_out)
+
+    if set(palette_in) == set(palette_out):
+        # ========== Case A: True color permutation (gauge) ==========
+        # K_in == K_out, so mapping is a permutation on ONE set
+        # Cycles ARE defined
+
+        # Build explicit permutation dict
+        perm = {cin: fwd[cin] for cin in palette_in}
+
+        # Compute cycle decomposition
+        visited = set()
+        cycles = []
+
+        for start in palette_in:
+            if start in visited:
+                continue
+
+            cycle = []
+            x = start
+            while x not in visited:
+                visited.add(x)
+                cycle.append(x)
+                x = perm.get(x, x)  # follow permutation within same set
+
+            if len(cycle) > 0:
+                cycles.append(cycle)
+
+        return {
+            "has_bijection": True,
+            "is_permutation": True,  # Case A
+            "perm": perm,
+            "cycles": cycles,
+            "color_mapping": None,  # Not used in Case A
+        }
+
+    else:
+        # ========== Case B: Disjoint palettes (non-gauge mapping) ==========
+        # K_in ≠ K_out, so this is NOT a permutation on one set
+        # Cycles are NOT defined (no single set to permute)
+        # This is real content transformation (law), not gauge
+
+        # Build color mapping (not permutation)
+        color_mapping = {cin: fwd[cin] for cin in palette_in}
+
+        return {
+            "has_bijection": True,
+            "is_permutation": False,  # Case B
+            "perm": None,  # Not a permutation
+            "cycles": None,  # Cycles not defined for disjoint palettes
+            "color_mapping": color_mapping,
+        }
+
+
+def trace_D_E_atoms(
+    D_atoms: Dict[str, Any],
+    E_grid: Dict[str, Any],
+    grid: np.ndarray,
+    global_map: Optional[Dict[str, Any]] = None
+) -> None:
+    """
+    Print trace summary of D-atoms and E-atoms for debugging.
+
+    Called from 05_laws/step.py when trace=True.
+    """
+    # If D_atoms and E_grid are provided (not empty), trace them
+    if D_atoms and E_grid:
+        H, W = grid.shape
+
+        print(f"[D-atoms] H,W = {H},{W}")
+        print(f"[D-atoms] row_periods: {D_atoms['row_periods'].tolist()}")
+        print(f"[D-atoms] col_periods: {D_atoms['col_periods'].tolist()}")
+
+        # Show only tiling flags that are True
+        true_tilings = [(b_r, b_c) for (b_r, b_c), v in D_atoms["tiling_flags"].items() if v]
+        print(f"[D-atoms] tiling_flags (True): {true_tilings}")
+
+        print(f"[E-atoms:grid] palette: {E_grid['palette']}")
+        print(f"[E-atoms:grid] pixel_counts: {E_grid['pixel_counts'].tolist()}")
+
+        # Show only non-zero component counts
+        nonzero_comps = {k: v for k, v in E_grid["component_counts"].items() if v > 0}
+        print(f"[E-atoms:grid] component_counts (nonzero): {nonzero_comps}")
+
+        print(f"[E-atoms:grid] most_frequent: {E_grid['most_frequent']}")
+        print(f"[E-atoms:grid] least_frequent: {E_grid['least_frequent']}")
+
+    # Trace global map if provided
+    if global_map is not None:
+        print(f"[E-atoms:global] has_bijection: {global_map['has_bijection']}")
+        if global_map["has_bijection"]:
+            print(f"[E-atoms:global] is_permutation: {global_map['is_permutation']}")
+            if global_map["is_permutation"]:
+                # Case A: True permutation (K_in == K_out)
+                print(f"  perm: {global_map['perm']}")
+                print(f"  cycles: {global_map['cycles']}")
+            else:
+                # Case B: Disjoint palettes (K_in ≠ K_out)
+                print(f"  color_mapping: {global_map['color_mapping']}")
+                print(f"  (Cycles not defined for disjoint palettes)")

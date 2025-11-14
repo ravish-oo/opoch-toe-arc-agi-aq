@@ -180,7 +180,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 * Row/col run‑lengths (length at each cell).
   **Acceptance:** quick checks on small grids; vectorized/fast enough.
 
-### WO‑4.3 Connectivity & shape (C12–C15) (180–240 LOC)
+### WO‑4.3 Connectivity & shape (C12–C15) (180–240 LOC) ✅ COMPLETED
 
 * Per‑color components via `ndimage.label` or BFS,
 * Stats per comp: area, perimeter, bbox, centroid (int), `(height,width)`, `(height-width)`, simple orientation class (sign of Δ moments),
