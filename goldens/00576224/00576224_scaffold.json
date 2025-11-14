@@ -4,7 +4,7 @@
         {
             "H": 6,
             "W": 6,
-            "frame_count": 0,
+            "frame_count": 20,
             "inner_count": 16,
             "d_top": {
                 "min": 0,
@@ -30,7 +30,7 @@
         {
             "H": 6,
             "W": 6,
-            "frame_count": 0,
+            "frame_count": 20,
             "inner_count": 16,
             "d_top": {
                 "min": 0,
