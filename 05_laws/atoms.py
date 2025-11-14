@@ -979,3 +979,104 @@ def trace_D_E_atoms(
                 # Case B: Disjoint palettes (K_in ≠ K_out)
                 print(f"  color_mapping: {global_map['color_mapping']}")
                 print(f"  (Cycles not defined for disjoint palettes)")
+
+
+# ============================================================================
+# F24: Input feature mirror (WO-4.5)
+# ============================================================================
+
+# Module-level cache for input atoms (test_in is immutable per test_idx)
+_input_atoms_cache: Dict[int, Dict[str, Any]] = {}
+
+
+def get_input_atoms_for_test(
+    canonical: Dict[str, Any],
+    test_idx: int = 0,
+) -> Dict[str, Any]:
+    """
+    F24: Mirror A–E atoms on inputs for evaluation of laws.
+
+    Anchors:
+      - 00_MATH_SPEC.md §5.1 F: "Mirror A–E on **inputs** to **evaluate predicates
+        on test_in** **only when referenced by a mined law**. **F24 does not create
+        new laws.** It never mines from inputs."
+      - 01_STAGES.md: Stage 05_laws
+      - 02_QUANTUM_MAPPING.md: (no input-driven laws)
+
+    IMPORTANT GUARDRAIL:
+      - NEVER called during mining from train_out.
+      - ONLY used to plug input-dependent values into laws already mined.
+      - Any call to this function in the mining path is a spec violation.
+
+    Implementation:
+      - Build scaffold on input grid using the SAME logic as Stage F (distances).
+      - Reuse the same atom functions as for outputs: compute_A/B/C/D/E_atoms.
+      - Cache result (test_in is immutable).
+
+    Input:
+      canonical: from 02_truth.canonicalize, containing:
+        - test_in: List[np.ndarray] (canonical input grids)
+      test_idx: which test input to compute atoms for (default 0)
+
+    Output:
+      atoms: {
+        "A": A-atoms dict (scaffold geometry),
+        "B": B-atoms dict (local texture),
+        "C": C-atoms dict (connectivity & shape),
+        "D": D-atoms dict (repetition & tiling),
+        "E": E-atoms dict (palette/global),
+      }
+
+    Raises:
+      IndexError: if test_idx out of range
+      ValueError: if scaffold build fails
+    """
+    # Check cache first
+    if test_idx in _input_atoms_cache:
+        return _input_atoms_cache[test_idx]
+
+    # Get test_in grid
+    test_in_grids = canonical.get("test_in", [])
+    if test_idx >= len(test_in_grids):
+        raise IndexError(
+            f"test_idx={test_idx} out of range for test_in "
+            f"(len={len(test_in_grids)})"
+        )
+
+    grid = test_in_grids[test_idx]
+    H, W = grid.shape
+
+    # Build scaffold on input grid using the SAME logic as Stage F
+    # Import here to avoid circular dependency
+    from utils.scaffold_utils import build_scaffold_for_grid
+
+    scaffold_info = build_scaffold_for_grid(grid)
+
+    # Now reuse the same atom functions as for outputs
+    # A-atoms: scaffold geometry
+    A_atoms = compute_A_atoms(H=H, W=W, scaffold_info=scaffold_info)
+
+    # B-atoms: local texture
+    B_atoms = compute_B_atoms(grid)
+
+    # C-atoms: connectivity & shape
+    C_atoms = compute_C_atoms(grid, scaffold_info=scaffold_info)
+
+    # D-atoms: repetition & tiling
+    D_atoms = compute_D_atoms(grid)
+
+    # E-atoms: palette/global (per-grid only, no task-level mapping)
+    E_atoms = compute_E_atoms_for_grid(grid, C_atoms=C_atoms)
+
+    atoms = {
+        "A": A_atoms,
+        "B": B_atoms,
+        "C": C_atoms,
+        "D": D_atoms,
+        "E": E_atoms,
+    }
+
+    # Cache result
+    _input_atoms_cache[test_idx] = atoms
+
+    return atoms

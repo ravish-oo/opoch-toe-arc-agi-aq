@@ -188,7 +188,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 * If comp is a ring that touches all sides, compute ring thickness class via min distance.
   **Acceptance:** stats consistent; sample prints.
 
-### WO‑4.4 Repetition & palette/global (D16–D18, E19–E23) (120–180 LOC)
+### WO‑4.4 Repetition & palette/global (D16–D18, E19–E23) (120–180 LOC) ✅ COMPLETED
 
 * Minimal **row** and **column** periods (≤ W or H),
 * 2D tiling flags for **factor** pairs `(b_r,b_c)` of `(H,W)`,

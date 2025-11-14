@@ -1,0 +1,92 @@
+{
+    "task_id": "05f2a901",
+    "per_output": [
+        {
+            "index": 0,
+            "H": 9,
+            "W": 10,
+            "frame_count": 34,
+            "inner_count": 56,
+            "d_top": {
+                "min": 0,
+                "max": 8,
+                "sum": 360
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 8,
+                "sum": 360
+            },
+            "d_left": {
+                "min": 0,
+                "max": 9,
+                "sum": 405
+            },
+            "d_right": {
+                "min": 0,
+                "max": 9,
+                "sum": 405
+            },
+            "has_midrow": true,
+            "has_midcol": false
+        },
+        {
+            "index": 1,
+            "H": 14,
+            "W": 9,
+            "frame_count": 42,
+            "inner_count": 84,
+            "d_top": {
+                "min": 0,
+                "max": 13,
+                "sum": 819
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 13,
+                "sum": 819
+            },
+            "d_left": {
+                "min": 0,
+                "max": 8,
+                "sum": 504
+            },
+            "d_right": {
+                "min": 0,
+                "max": 8,
+                "sum": 504
+            },
+            "has_midrow": false,
+            "has_midcol": true
+        },
+        {
+            "index": 2,
+            "H": 11,
+            "W": 10,
+            "frame_count": 38,
+            "inner_count": 72,
+            "d_top": {
+                "min": 0,
+                "max": 10,
+                "sum": 550
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 10,
+                "sum": 550
+            },
+            "d_left": {
+                "min": 0,
+                "max": 9,
+                "sum": 495
+            },
+            "d_right": {
+                "min": 0,
+                "max": 9,
+                "sum": 495
+            },
+            "has_midrow": true,
+            "has_midcol": false
+        }
+    ]
+}

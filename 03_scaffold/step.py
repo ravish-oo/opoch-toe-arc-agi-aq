@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 import logging
 
 import numpy as np
+from utils.scaffold_utils import build_scaffold_for_grid
 
 
 def _frame_for_output(Y: np.ndarray) -> np.ndarray:
@@ -45,55 +46,6 @@ def _frame_for_output(Y: np.ndarray) -> np.ndarray:
     frame[:, W - 1] = True   # right column
 
     return frame
-
-
-def _distance_fields_for_output(H: int, W: int, frame_mask: np.ndarray) -> Dict[str, np.ndarray]:
-    """
-    Directional distance fields per-grid, as shortest path lengths along
-    each axis to the border frame.
-
-    Since frame_mask marks the outer border (from WO-2.1), we use closed-form
-    formulas for distances to border along each direction:
-      d_top[r,c]    = r              (distance to row 0)
-      d_bottom[r,c] = (H-1) - r      (distance to row H-1)
-      d_left[r,c]   = c              (distance to col 0)
-      d_right[r,c]  = (W-1) - c      (distance to col W-1)
-
-    These are directional distances along axes, equivalent to 1D BFS along
-    rows/cols. They match the BFS-on-4-neighbor-grid metric for the border frame.
-
-    Anchors:
-      - 00_MATH_SPEC.md §4.2: "compute distances d_top, d_bottom, d_left, d_right"
-      - 01_STAGES.md: scaffold = output-intrinsic geometry
-      - 02_QUANTUM_MAPPING.md: distance computation is in the free sector
-
-    Input:
-      H, W: grid shape
-      frame_mask: H×W bool array (outer border, from WO-2.1)
-
-    Output:
-      dict with keys "d_top", "d_bottom", "d_left", "d_right", each H×W int array
-    """
-    d_top = np.zeros((H, W), dtype=int)
-    d_bottom = np.zeros((H, W), dtype=int)
-    d_left = np.zeros((H, W), dtype=int)
-    d_right = np.zeros((H, W), dtype=int)
-
-    # Closed-form directional distances to border
-    for r in range(H):
-        for c in range(W):
-            d_top[r, c] = r
-            d_bottom[r, c] = (H - 1) - r
-            d_left[r, c] = c
-            d_right[r, c] = (W - 1) - c
-
-    # Border cells naturally get 0 for all distances (no special-casing needed)
-    return {
-        "d_top": d_top,
-        "d_bottom": d_bottom,
-        "d_left": d_left,
-        "d_right": d_right,
-    }
 
 
 def _inner_region(d_top: np.ndarray, d_bottom: np.ndarray,
@@ -397,7 +349,8 @@ def build(canonical: Dict[str, Any], trace: bool = False) -> Dict[str, Any]:
         frame_mask = _frame_for_output(Y)
 
         # WO-2.2: Distance fields (directional to border)
-        distances = _distance_fields_for_output(H, W, frame_mask)
+        # Use shared helper from utils/scaffold_utils (for F24 reuse)
+        distances = build_scaffold_for_grid(Y)
         d_top = distances["d_top"]
         d_bottom = distances["d_bottom"]
         d_left = distances["d_left"]

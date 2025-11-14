@@ -1,0 +1,60 @@
+{
+    "task_id": "05f2a901",
+    "train_size_pairs": [
+        {
+            "H_in": 9,
+            "W_in": 10,
+            "H_out": 9,
+            "W_out": 10
+        },
+        {
+            "H_in": 14,
+            "W_in": 9,
+            "H_out": 14,
+            "W_out": 9
+        },
+        {
+            "H_in": 11,
+            "W_in": 10,
+            "H_out": 11,
+            "W_out": 10
+        }
+    ],
+    "unique_sizes_before_screen": [
+        {
+            "H_out": 11,
+            "W_out": 10
+        }
+    ],
+    "screens": {
+        "train_out_only": true,
+        "checks": [
+            {
+                "name": "feasibility_inner_region",
+                "passed": true
+            },
+            {
+                "name": "parity_midrow_midcol",
+                "passed": true
+            },
+            {
+                "name": "periodicity_divides_HW",
+                "passed": true
+            }
+        ]
+    },
+    "result": {
+        "status": "OK",
+        "surviving_sizes": [
+            {
+                "H_out": 11,
+                "W_out": 10
+            }
+        ],
+        "chosen": {
+            "H_out": 11,
+            "W_out": 10
+        },
+        "survivor_count": 1
+    }
+}
