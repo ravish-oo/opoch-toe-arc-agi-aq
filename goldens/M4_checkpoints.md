@@ -368,3 +368,120 @@ Build a histogram {p → number_of_rows_with_period_p}.
 col_period_hist
 
 Same as above but per column.
+#### 0d3d703e
+{
+  "task_id": "0d3d703e",
+  "atoms_summary": {
+    "train_out": [
+      {
+        "index": 0,
+        "pixel_counts": {
+          "1": 3,
+          "9": 3,
+          "2": 3
+        },
+        "component_counts_nonzero": {
+          "1": 1,
+          "9": 1,
+          "2": 1
+        },
+        "row_period_hist": {
+          "3": 3
+        },
+        "col_period_hist": {
+          "1": 3
+        }
+      },
+      {
+        "index": 1,
+        "pixel_counts": {
+          "6": 3,
+          "4": 3,
+          "9": 3
+        },
+        "component_counts_nonzero": {
+          "6": 1,
+          "4": 1,
+          "9": 1
+        },
+        "row_period_hist": {
+          "3": 3
+        },
+        "col_period_hist": {
+          "1": 3
+        }
+      },
+      {
+        "index": 2,
+        "pixel_counts": {
+          "8": 3,
+          "3": 3,
+          "6": 3
+        },
+        "component_counts_nonzero": {
+          "8": 1,
+          "3": 1,
+          "6": 1
+        },
+        "row_period_hist": {
+          "3": 3
+        },
+        "col_period_hist": {
+          "1": 3
+        }
+      },
+      {
+        "index": 3,
+        "pixel_counts": {
+          "4": 3,
+          "5": 3,
+          "6": 3
+        },
+        "component_counts_nonzero": {
+          "4": 1,
+          "5": 1,
+          "6": 1
+        },
+        "row_period_hist": {
+          "3": 3
+        },
+        "col_period_hist": {
+          "1": 3
+        }
+      }
+    ],
+    "palette_permutation": {
+      "1": 5,
+      "2": 6,
+      "3": 4,
+      "4": 3,
+      "5": 1,
+      "6": 2,
+      "8": 9,
+      "9": 8
+    }
+  }
+}
+
+How your tester should compute and check
+For each train_out[i]:
+pixel_counts
+Count how many times each color appears in the 3×3 output.
+component_counts_nonzero
+For each color k > 0, run N4-connected components and count how many components of that color there are.
+In all four outputs, each non-zero color forms one vertical stripe ⇒ exactly 1 component per color.
+row_period_hist
+For each row (length 3), find the minimal period p such that row[j] == row[j % p] for all j.
+All rows are like [a, b, c] with all three different, so p = 3 for every row.
+Hence {3: 3}.
+col_period_hist
+For each column, same minimal period logic.
+Each column is constant (same color downwards), so p = 1 for each column.
+Hence {1: 3}.
+palette_permutation
+From training pairs, reconstruct the input→output color mapping by scanning aligned (input_color, output_color) pairs and ensuring consistency:
+5→1, 8→9, 6→2
+2→6, 3→4
+9→8, 4→3
+1→5
+If your atom implementation produces these summaries, you’re in sync with the spec on 0d3d703e for M4.

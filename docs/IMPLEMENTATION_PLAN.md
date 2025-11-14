@@ -165,14 +165,14 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 
 > **Grid‑aware policy:** any former finite range like `{2..6}` becomes **bounded by grid**: divisors or up to `min(H,W)` as appropriate. This preserves 100% coverage without blow‑ups on tiny boards.
 
-### WO‑4.1 Coordinates & distances (A1–A7) (120–160 LOC)
+### WO‑4.1 Coordinates & distances (A1–A7) (120–160 LOC) ✅ COMPLETED
 
 * Provide arrays for `H,W; r,c; r±c; d_top,bottom,left,right; midrow/midcol`.
 * Mod classes: **all divisors** of `H` and of `W` (or `2..min(H,W)` if simpler).
 * Block coords: block sizes `b` over **divisors** (tiling‑valid) of `H,W`.
   **Acceptance:** shapes correct; hashes stable.
 
-### WO‑4.2 Local texture (B8–B11) (150–220 LOC)
+### WO‑4.2 Local texture (B8–B11) (150–220 LOC) ✅ COMPLETED
 
 * N4/N8 neighbor counts per color (conv or shifts),
 * 3×3 full hash (base‑11, pad sentinel=10),

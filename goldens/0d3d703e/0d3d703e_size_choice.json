@@ -1,0 +1,66 @@
+{
+    "task_id": "0d3d703e",
+    "train_size_pairs": [
+        {
+            "H_in": 3,
+            "W_in": 3,
+            "H_out": 3,
+            "W_out": 3
+        },
+        {
+            "H_in": 3,
+            "W_in": 3,
+            "H_out": 3,
+            "W_out": 3
+        },
+        {
+            "H_in": 3,
+            "W_in": 3,
+            "H_out": 3,
+            "W_out": 3
+        },
+        {
+            "H_in": 3,
+            "W_in": 3,
+            "H_out": 3,
+            "W_out": 3
+        }
+    ],
+    "unique_sizes_before_screen": [
+        {
+            "H_out": 3,
+            "W_out": 3
+        }
+    ],
+    "screens": {
+        "train_out_only": true,
+        "checks": [
+            {
+                "name": "feasibility_inner_region",
+                "passed": true
+            },
+            {
+                "name": "parity_midrow_midcol",
+                "passed": true
+            },
+            {
+                "name": "periodicity_divides_HW",
+                "passed": true
+            }
+        ]
+    },
+    "result": {
+        "status": "OK",
+        "surviving_sizes": [
+            {
+                "H_out": 3,
+                "W_out": 3
+            }
+        ],
+        "chosen": {
+            "H_out": 3,
+            "W_out": 3
+        },
+        "survivor_count": 1
+    }
+}

@@ -7,11 +7,13 @@ Anchor:
 Implements:
   - WO-4.1: A-atoms (coordinates & distances)
   - WO-4.2: B-atoms (local texture)
+  - WO-4.3: C-atoms (connectivity & shape)
 """
 
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from scipy import ndimage
+from skimage.measure import regionprops
 
 
 def _divisors(n: int) -> np.ndarray:
@@ -375,3 +377,216 @@ def trace_B_atoms(B_atoms: Dict[str, Any], grid: np.ndarray) -> None:
     print(f"[B-atoms] ring_5x5 range: [{B_atoms['ring_5x5'].min()}, {B_atoms['ring_5x5'].max()}]")
     print(f"[B-atoms] row_span_len range: [{B_atoms['row_span_len'].min()}, {B_atoms['row_span_len'].max()}]")
     print(f"[B-atoms] col_span_len range: [{B_atoms['col_span_len'].min()}, {B_atoms['col_span_len'].max()}]")
+
+
+# ========== WO-4.3: C-atoms (Connectivity & shape) ==========
+
+
+def compute_C_atoms(grid: np.ndarray, scaffold_info: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Compute C-atoms (connectivity & shape) for a single output grid.
+
+    Anchor:
+      - 00_MATH_SPEC.md §5.1 C: Connectivity & shape
+
+    Input:
+      grid: np.ndarray[(H,W)] with colors 0..9 in canonical coords
+      scaffold_info: per-output dict from 03_scaffold containing:
+        - d_top, d_bottom, d_left, d_right: np.ndarray[(H,W), int]
+
+    Output:
+      Dict containing:
+        - components: Dict[int, List[Dict]] - per-color list of component stats
+          Each component dict contains:
+            - label: int (1..num_components for that color)
+            - area: int
+            - perimeter_4: int (4-edge perimeter)
+            - bbox: (int, int, int, int) (r_min, c_min, r_max, c_max) inclusive
+            - centroid_r: int (floor)
+            - centroid_c: int (floor)
+            - height: int
+            - width: int
+            - height_minus_width: int
+            - area_rank: int (0 = largest area for that color)
+            - ring_thickness_class: int or None (only if touches all 4 sides)
+            - aspect_class: None (spec-listed but undefined; placeholder)
+            - orientation_sign: None (spec-listed but undefined; placeholder)
+
+    Raises:
+      ValueError: if scaffold_info is None or shapes don't match
+    """
+    H, W = grid.shape
+
+    # WO-4.3: Fail loudly if scaffold_info missing
+    if scaffold_info is None:
+        raise ValueError(
+            "C-atoms require scaffold_info with distance fields; "
+            "cannot compute ring_thickness_class without them."
+        )
+
+    # Validate distance field shapes
+    d_top = np.asarray(scaffold_info["d_top"], dtype=int)
+    d_bottom = np.asarray(scaffold_info["d_bottom"], dtype=int)
+    d_left = np.asarray(scaffold_info["d_left"], dtype=int)
+    d_right = np.asarray(scaffold_info["d_right"], dtype=int)
+
+    if d_top.shape != (H, W):
+        raise ValueError(f"d_top shape {d_top.shape} != grid shape ({H},{W})")
+    if d_bottom.shape != (H, W):
+        raise ValueError(f"d_bottom shape {d_bottom.shape} != grid shape ({H},{W})")
+    if d_left.shape != (H, W):
+        raise ValueError(f"d_left shape {d_left.shape} != grid shape ({H},{W})")
+    if d_right.shape != (H, W):
+        raise ValueError(f"d_right shape {d_right.shape} != grid shape ({H},{W})")
+
+    # ========== 3.1 Per-color components (4-connectivity) ==========
+    colors = np.unique(grid)
+
+    # 4-connectivity structure
+    structure_4 = np.array([[0, 1, 0],
+                            [1, 1, 1],
+                            [0, 1, 0]], dtype=int)
+
+    components = {}
+
+    for k in colors:
+        mask = (grid == k).astype(np.uint8)
+
+        # Label 4-connected components
+        labeled, num_features = ndimage.label(mask, structure=structure_4)
+
+        if num_features == 0:
+            components[int(k)] = []
+            continue
+
+        # ========== 3.2 Compute 4-edge perimeter for this color ==========
+        # Perimeter = count of edges between component pixels and background
+        # For each direction, check if neighbor is different
+
+        # Pad mask to handle borders (pad with 0 = background)
+        mask_padded = np.pad(mask, pad_width=1, mode='constant', constant_values=0)
+
+        # Shift in 4 directions
+        mask_up = mask_padded[:-2, 1:-1]     # shift down (neighbor above)
+        mask_down = mask_padded[2:, 1:-1]    # shift up (neighbor below)
+        mask_left = mask_padded[1:-1, :-2]   # shift right (neighbor left)
+        mask_right = mask_padded[1:-1, 2:]   # shift left (neighbor right)
+
+        # Edge exists where mask==1 and neighbor==0
+        edges_up = mask & (mask_up == 0)
+        edges_down = mask & (mask_down == 0)
+        edges_left = mask & (mask_left == 0)
+        edges_right = mask & (mask_right == 0)
+
+        # Total edge count per pixel
+        edge_count_per_pixel = (edges_up + edges_down + edges_left + edges_right).astype(int)
+
+        # Sum edge counts per component label
+        label_ids = np.arange(1, num_features + 1)
+        perimeter_per_label = ndimage.sum(edge_count_per_pixel, labels=labeled, index=label_ids)
+
+        # ========== 3.3 Use regionprops to extract component stats ==========
+        props = regionprops(labeled)
+
+        comps_for_k = []
+
+        for prop in props:
+            label_id = prop.label
+            area = int(prop.area)
+
+            # bbox: (min_row, min_col, max_row, max_col) with max exclusive
+            minr, minc, maxr, maxc = prop.bbox
+            r_min, c_min = minr, minc
+            r_max, c_max = maxr - 1, maxc - 1  # convert to inclusive
+
+            height = r_max - r_min + 1
+            width = c_max - c_min + 1
+
+            # centroid (int floor)
+            centroid_r = int(np.floor(prop.centroid[0]))
+            centroid_c = int(np.floor(prop.centroid[1]))
+
+            height_minus_width = height - width
+
+            # Perimeter from our 4-edge calculation
+            perimeter_4 = int(perimeter_per_label[label_id - 1])
+
+            # ========== 3.4 Ring thickness class ==========
+            # Check if component touches all 4 sides
+            comp_mask = (labeled == label_id)
+
+            touches_top = comp_mask[0, :].any()
+            touches_bottom = comp_mask[H - 1, :].any()
+            touches_left = comp_mask[:, 0].any()
+            touches_right = comp_mask[:, W - 1].any()
+
+            ring_thickness_class = None
+            if touches_top and touches_bottom and touches_left and touches_right:
+                # Component is a ring touching all sides
+                # Compute thickness via min distance to frame
+                distances_min = np.minimum.reduce([
+                    d_top[comp_mask],
+                    d_bottom[comp_mask],
+                    d_left[comp_mask],
+                    d_right[comp_mask]
+                ])
+                ring_thickness_class = int(distances_min.max())
+
+            comps_for_k.append({
+                "label": label_id,
+                "area": area,
+                "perimeter_4": perimeter_4,
+                "bbox": (r_min, c_min, r_max, c_max),
+                "centroid_r": centroid_r,
+                "centroid_c": centroid_c,
+                "height": height,
+                "width": width,
+                "height_minus_width": height_minus_width,
+                "area_rank": -1,  # will be set below
+                "ring_thickness_class": ring_thickness_class,
+                "aspect_class": None,  # spec-listed but undefined
+                "orientation_sign": None,  # spec-listed but undefined
+            })
+
+        # ========== 3.5 Area rank (within color, 0 = largest) ==========
+        areas = [comp["area"] for comp in comps_for_k]
+        sorted_idx = np.argsort([-a for a in areas])  # descending order
+        for rank, comp_idx in enumerate(sorted_idx):
+            comps_for_k[comp_idx]["area_rank"] = rank
+
+        components[int(k)] = comps_for_k
+
+    # ========== Return C-atoms dict ==========
+    return {
+        "components": components,
+    }
+
+
+def trace_C_atoms(C_atoms: Dict[str, Any], grid: np.ndarray) -> None:
+    """
+    Print trace summary of C-atoms for debugging.
+
+    Called from 05_laws/step.py when trace=True.
+    """
+    H, W = grid.shape
+    colors = np.unique(grid)
+
+    print(f"[C-atoms] H,W = {H},{W}")
+    print(f"[C-atoms] colors present: {colors.tolist()}")
+
+    components = C_atoms["components"]
+    print(f"[C-atoms] components per color:")
+
+    for k in sorted(components.keys()):
+        comps = components[k]
+        print(f"  color {k}: {len(comps)} component(s)")
+        if comps:
+            areas = [c["area"] for c in comps]
+            perims = [c["perimeter_4"] for c in comps]
+            ranks = [c["area_rank"] for c in comps]
+            rings = [c["ring_thickness_class"] for c in comps]
+
+            print(f"    areas: {areas}")
+            print(f"    perimeters_4: {perims}")
+            print(f"    area_ranks: {ranks}")
+            print(f"    ring_thickness_class: {rings}")
