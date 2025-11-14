@@ -23,6 +23,12 @@ u need to understand the Work order and see that it aligns with ur understanding
   once u hv full clarity then u can proceed to review and test
 
 ====
+
+pls dont expect me to hand hold u this much. i mean u hv read the spec and implementation plan. onus is on u now to make sure we deliver 100% arc agi matches
+  and implementation matches the spec 100%. are we on same page 
+
+====
+
 Absolutely—here’s exactly what you asked for, in two parts:
 
 1. a tiny **patch work order** to add a progress layer into the harness (so we can show “on-spec” progress at every WO without waiting for final ARC answers), and

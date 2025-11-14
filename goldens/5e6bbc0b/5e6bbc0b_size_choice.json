@@ -1,0 +1,77 @@
+{
+    "task_id": "5e6bbc0b",
+    "train_size_pairs": [
+        {
+            "H_in": 5,
+            "W_in": 6,
+            "H_out": 5,
+            "W_out": 6
+        },
+        {
+            "H_in": 7,
+            "W_in": 7,
+            "H_out": 7,
+            "W_out": 7
+        },
+        {
+            "H_in": 4,
+            "W_in": 8,
+            "H_out": 4,
+            "W_out": 8
+        },
+        {
+            "H_in": 3,
+            "W_in": 3,
+            "H_out": 3,
+            "W_out": 3
+        }
+    ],
+    "candidates": [
+        {
+            "kind": "factor",
+            "formula": {
+                "H_out": "r_H * H_in",
+                "W_out": "r_W * W_in"
+            },
+            "params": {
+                "r_H": 1,
+                "r_W": 1
+            },
+            "fits_all_training_pairs": true
+        }
+    ],
+    "screens": {
+        "train_out_only": true,
+        "checks": [
+            {
+                "name": "feasibility_inner_region",
+                "passed": true
+            },
+            {
+                "name": "parity_midrow_midcol",
+                "passed": true
+            },
+            {
+                "name": "periodicity_divides_HW",
+                "passed": true
+            },
+            {
+                "name": "frame_thickness_capacity",
+                "passed": true
+            }
+        ]
+    },
+    "result": {
+        "status": "OK",
+        "chosen": {
+            "kind": "factor",
+            "params": {
+                "r_H": 1,
+                "r_W": 1
+            },
+            "H_out": 5,
+            "W_out": 5
+        },
+        "survivor_count": 1
+    }
+}

@@ -1,0 +1,121 @@
+{
+    "task_id": "5e6bbc0b",
+    "per_output": [
+        {
+            "index": 0,
+            "H": 5,
+            "W": 6,
+            "frame_count": 0,
+            "inner_count": 12,
+            "d_top": {
+                "min": 0,
+                "max": 4,
+                "sum": 60
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 4,
+                "sum": 60
+            },
+            "d_left": {
+                "min": 0,
+                "max": 5,
+                "sum": 75
+            },
+            "d_right": {
+                "min": 0,
+                "max": 5,
+                "sum": 75
+            },
+            "has_midrow": true,
+            "has_midcol": false
+        },
+        {
+            "index": 1,
+            "H": 7,
+            "W": 7,
+            "frame_count": 0,
+            "inner_count": 25,
+            "d_top": {
+                "min": 0,
+                "max": 6,
+                "sum": 147
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 6,
+                "sum": 147
+            },
+            "d_left": {
+                "min": 0,
+                "max": 6,
+                "sum": 147
+            },
+            "d_right": {
+                "min": 0,
+                "max": 6,
+                "sum": 147
+            },
+            "has_midrow": true,
+            "has_midcol": true
+        },
+        {
+            "index": 2,
+            "H": 4,
+            "W": 8,
+            "frame_count": 0,
+            "inner_count": 12,
+            "d_top": {
+                "min": 0,
+                "max": 3,
+                "sum": 48
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 3,
+                "sum": 48
+            },
+            "d_left": {
+                "min": 0,
+                "max": 7,
+                "sum": 112
+            },
+            "d_right": {
+                "min": 0,
+                "max": 7,
+                "sum": 112
+            },
+            "has_midrow": false,
+            "has_midcol": false
+        },
+        {
+            "index": 3,
+            "H": 3,
+            "W": 3,
+            "frame_count": 0,
+            "inner_count": 1,
+            "d_top": {
+                "min": 0,
+                "max": 2,
+                "sum": 9
+            },
+            "d_bottom": {
+                "min": 0,
+                "max": 2,
+                "sum": 9
+            },
+            "d_left": {
+                "min": 0,
+                "max": 2,
+                "sum": 9
+            },
+            "d_right": {
+                "min": 0,
+                "max": 2,
+                "sum": 9
+            },
+            "has_midrow": true,
+            "has_midcol": true
+        }
+    ]
+}

@@ -93,7 +93,7 @@ arc_cognition/
 * Validate: palette in 0..9; H,W ≤ 30.
   **Acceptance:** prints shapes/palette; deterministic.
 
-### WO‑1.2 Truth: union graph (120–160 LOC)
+### WO‑1.2 Truth: union graph (120–160 LOC) ✅ COMPLETED
 
 * Disjoint components; per grid:
 
