@@ -83,7 +83,7 @@ arc_cognition/
 
 ---
 
-## Milestone 1 — present + truth (canonical gauge) (≤450 LOC)
+## Milestone 1 — present + truth (canonical gauge) (≤450 LOC) ✅ COMPLETED
 
 **Goal:** load ARC JSON; canonicalize all grids in a shared gauge.
 
@@ -103,7 +103,7 @@ arc_cognition/
 * **No grid_id** in colors.
   **Acceptance:** |V|,|E| reasonable; dump a checksum.
 
-### WO‑1.3 Truth: canonical labeling (120–160 LOC)
+### WO‑1.3 Truth: canonical labeling (120–160 LOC)  ✅ COMPLETED
 
 * `igraph.Graph.canonical_permutation` with colored vertices.
 * Extract per‑grid **canonical row/col order** from perm on row/col gadgets; tie‑break stable on (canon_index, original_index).
