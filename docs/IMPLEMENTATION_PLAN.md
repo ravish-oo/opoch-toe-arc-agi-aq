@@ -159,7 +159,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 
 ---
 
-## Milestone 4 — laws: atom derivations (grid‑aware) (≤600 LOC)
+## Milestone 4 — laws: atom derivations (grid‑aware) (≤600 LOC) ✅ COMPLETED
 
 **Goal:** implement the **frozen**, grid‑aware atom menu.
 
@@ -203,7 +203,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 * **Guardrail (explicit):** **F24 does not create new laws.** It only supplies values to instantiate predicates for laws already mined from train_out.
   **Acceptance:** a simple test: a law that says “midrow color equals most‑frequent input color” must **mine from train_out** and merely **read** input stats at test time.
 
-### WO‑4.6 Component rigid/affine transforms (G25–G26) (180–240 LOC)
+### WO‑4.6 Component rigid/affine transforms (G25–G26) (180–240 LOC) ✅ COMPLETED
 
 * Enumerate `D4 × scales` where **scale s** ranges over positive integers that keep the transformed component **inside** the output grid.
 * Choose `(A,t)` only if exact pixel set equality holds across paired components in train_out (no fuzzy matches).
@@ -212,7 +212,7 @@ For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_left
 
 ---
 
-## Milestone 5 — laws: invariant miner (WHAT) (≤450 LOC)
+## Milestone 5 — laws: invariant miner (WHAT) 
 
 **Goal:** promote “always true across train_out” into linear constraints for the test.
 

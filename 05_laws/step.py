@@ -14,13 +14,14 @@ from .atoms import (
     compute_C_atoms, trace_C_atoms,
     compute_D_atoms, compute_E_atoms_for_grid,
     compute_global_palette_mapping, trace_D_E_atoms,
-    compute_G_atoms, trace_G_atoms
+    compute_G_atoms, trace_G_atoms,
+    compute_type_keys_for_grid, trace_type_keys
 )
 
 
 def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> Any:
     """
-    Stage: laws (N) — WO-4.1/4.2/4.3/4.4/4.6: compute A+B+C+D+E+G atoms for train_out
+    Stage: laws (N) — WO-4.1/4.2/4.3/4.4/4.6/5.1: compute A+B+C+D+E+G+type_keys atoms for train_out
 
     Anchor:
       - 01_STAGES.md: laws
@@ -35,13 +36,13 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
 
     Output:
       Invariants object encoding fixes, equalities, forbids, etc.
-      For WO-4.1/4.2/4.3/4.4/4.6: returns A+B+C+D+E+G atoms for each train_out;
+      For WO-4.1/4.2/4.3/4.4/4.6/5.1: returns A+B+C+D+E+G+type_keys atoms for each train_out;
       mining not yet implemented.
     """
     if trace:
-        logging.info("[laws] mine() called (WO-4.1/4.2/4.3/4.4/4.6: A+B+C+D+E+G atoms)")
+        logging.info("[laws] mine() called (WO-4.1/4.2/4.3/4.4/4.6/5.1: A+B+C+D+E+G+type_keys atoms)")
 
-    # WO-4.1/4.2/4.3/4.4/4.6: Compute A+B+C+D+E+G atoms for each train_out
+    # WO-4.1/4.2/4.3/4.4/4.6/5.1: Compute A+B+C+D+E+G+type_keys atoms for each train_out
     # Later WOs will add actual invariant mining
     train_out_A_atoms: List[Dict[str, Any]] = []
     train_out_B_atoms: List[Dict[str, Any]] = []
@@ -49,6 +50,7 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
     train_out_D_atoms: List[Dict[str, Any]] = []
     train_out_E_atoms: List[Dict[str, Any]] = []
     train_out_G_atoms: List[Dict[str, Any]] = []
+    train_out_type_keys: List[Dict[str, Any]] = []
 
     per_output = scaffold["per_output"]
     train_out_grids = canonical["train_out"]
@@ -81,6 +83,10 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
         G_atoms = compute_G_atoms(grid, C_atoms)
         train_out_G_atoms.append(G_atoms)
 
+        # WO-5.1: Compute type keys for this train_out grid
+        type_keys = compute_type_keys_for_grid(A_atoms, B_atoms, D_atoms, G_atoms)
+        train_out_type_keys.append(type_keys)
+
         # Trace for first grid if requested
         if trace and i == 0:
             logging.info(f"[laws] train_out#{i} A-atoms:")
@@ -93,6 +99,8 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
             trace_D_E_atoms(D_atoms, E_atoms, grid)
             logging.info(f"[laws] train_out#{i} G-atoms:")
             trace_G_atoms(G_atoms, grid)
+            logging.info(f"[laws] train_out#{i} Type keys:")
+            trace_type_keys(type_keys)
 
     # WO-4.4: Compute task-level global palette mapping
     train_in_grids = canonical["train_in"]
@@ -102,7 +110,7 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
         logging.info("[laws] Global palette mapping:")
         trace_D_E_atoms({}, {}, train_out_grids[0], global_map=global_palette_mapping)
 
-    # WO-4.1/4.2/4.3/4.4/4.6: Return partial result (just A+B+C+D+E+G atoms)
+    # WO-4.1/4.2/4.3/4.4/4.6/5.1: Return partial result (just A+B+C+D+E+G+type_keys atoms)
     # Later WOs will compute test_out atoms and mine invariants
     result = {
         "train_out_A_atoms": train_out_A_atoms,
@@ -111,11 +119,12 @@ def mine(canonical: Any, scaffold: Any, out_size: Any, trace: bool = False) -> A
         "train_out_D_atoms": train_out_D_atoms,
         "train_out_E_atoms": train_out_E_atoms,
         "train_out_G_atoms": train_out_G_atoms,
+        "train_out_type_keys": train_out_type_keys,
         "global_palette_mapping": global_palette_mapping,
         "invariants": None,  # Not yet implemented
     }
 
     if trace:
-        logging.info(f"[laws] computed A+B+C+D+E+G atoms for {len(train_out_A_atoms)} train_out grids")
+        logging.info(f"[laws] computed A+B+C+D+E+G+type_keys atoms for {len(train_out_A_atoms)} train_out grids")
 
     return result

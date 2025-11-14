@@ -12,44 +12,34 @@ This test validates C-atoms only (component counts per color).
 
 import sys
 import json
-import logging
-import importlib.util
+import numpy as np
 from pathlib import Path
 
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent))
 
-def _import_stage_step(stage_name):
-    """Helper to import step.py from stages with numeric prefixes."""
-    spec = importlib.util.spec_from_file_location(
-        f"{stage_name}.step",
-        Path(__file__).parent.parent / stage_name / "step.py"
-    )
+import importlib.util
+
+# Load modules with numeric prefixes
+def load_module(module_name, file_path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
-
-# Import stages
-_present = _import_stage_step("01_present")
-_truth = _import_stage_step("02_truth")
-_scaffold = _import_stage_step("03_scaffold")
-_size_choice = _import_stage_step("04_size_choice")
-_laws = _import_stage_step("05_laws")
+# Load stages
+truth_mod = load_module("truth", "02_truth/step.py")
+scaffold_mod = load_module("scaffold", "03_scaffold/step.py")
+size_choice_mod = load_module("size_choice", "04_size_choice/step.py")
+laws_mod = load_module("laws", "05_laws/step.py")
 
 
 def load_task(task_id: str):
     """Load task from ARC training data."""
-    data_path = Path(__file__).parent.parent / "data" / "arc-agi_training_challenges.json"
-    data = json.loads(data_path.read_text())
-
-    if task_id not in data:
-        raise KeyError(f"Task {task_id} not found")
-
-    task_bundle = {
-        "task_id": task_id,
-        "test_index": 0,
-        "raw_task": data[task_id],
-    }
-    return task_bundle
+    import json
+    task_path = Path(f"data/training/{task_id}.json")
+    with open(task_path) as f:
+        return json.load(f)
 
 
 def compute_component_counts_nonzero(C_atoms):
@@ -83,12 +73,15 @@ def test_task_833966f4():
         ]
     }
 
-    task_bundle = load_task("833966f4")
-    present = _present.load(task_bundle, trace=False)
-    truth = _truth.canonicalize(present, trace=False)
-    scaffold = _scaffold.build(truth, trace=False)
-    size_choice = _size_choice.mine(truth, scaffold, trace=False)
-    laws = _laws.mine(truth, scaffold, size_choice, trace=False)
+    task = load_task("833966f4")
+    present = {"train_in": [np.array(p["input"]) for p in task["train"]],
+               "train_out": [np.array(p["output"]) for p in task["train"]],
+               "test_in": [np.array(p["input"]) for p in task["test"]]}
+
+    truth = truth_mod.canonicalize(present, trace=False)
+    scaffold = scaffold_mod.mine(truth, trace=False)
+    size_choice = size_choice_mod.mine(truth, scaffold, trace=False)
+    laws = laws_mod.mine(truth, scaffold, size_choice, trace=False)
 
     C_atoms_list = laws["train_out_C_atoms"]
 
@@ -136,12 +129,15 @@ def test_task_74dd1130():
         ]
     }
 
-    task_bundle = load_task("74dd1130")
-    present = _present.load(task_bundle, trace=False)
-    truth = _truth.canonicalize(present, trace=False)
-    scaffold = _scaffold.build(truth, trace=False)
-    size_choice = _size_choice.mine(truth, scaffold, trace=False)
-    laws = _laws.mine(truth, scaffold, size_choice, trace=False)
+    task = load_task("74dd1130")
+    present = {"train_in": [np.array(p["input"]) for p in task["train"]],
+               "train_out": [np.array(p["output"]) for p in task["train"]],
+               "test_in": [np.array(p["input"]) for p in task["test"]]}
+
+    truth = truth_mod.canonicalize(present, trace=False)
+    scaffold = scaffold_mod.mine(truth, trace=False)
+    size_choice = size_choice_mod.mine(truth, scaffold, trace=False)
+    laws = laws_mod.mine(truth, scaffold, size_choice, trace=False)
 
     C_atoms_list = laws["train_out_C_atoms"]
 
@@ -186,12 +182,15 @@ def test_task_0d3d703e():
         ]
     }
 
-    task_bundle = load_task("0d3d703e")
-    present = _present.load(task_bundle, trace=False)
-    truth = _truth.canonicalize(present, trace=False)
-    scaffold = _scaffold.build(truth, trace=False)
-    size_choice = _size_choice.mine(truth, scaffold, trace=False)
-    laws = _laws.mine(truth, scaffold, size_choice, trace=False)
+    task = load_task("0d3d703e")
+    present = {"train_in": [np.array(p["input"]) for p in task["train"]],
+               "train_out": [np.array(p["output"]) for p in task["train"]],
+               "test_in": [np.array(p["input"]) for p in task["test"]]}
+
+    truth = truth_mod.canonicalize(present, trace=False)
+    scaffold = scaffold_mod.mine(truth, trace=False)
+    size_choice = size_choice_mod.mine(truth, scaffold, trace=False)
+    laws = laws_mod.mine(truth, scaffold, size_choice, trace=False)
 
     C_atoms_list = laws["train_out_C_atoms"]
 
@@ -232,12 +231,15 @@ def test_task_46f33fce():
         ]
     }
 
-    task_bundle = load_task("46f33fce")
-    present = _present.load(task_bundle, trace=False)
-    truth = _truth.canonicalize(present, trace=False)
-    scaffold = _scaffold.build(truth, trace=False)
-    size_choice = _size_choice.mine(truth, scaffold, trace=False)
-    laws = _laws.mine(truth, scaffold, size_choice, trace=False)
+    task = load_task("46f33fce")
+    present = {"train_in": [np.array(p["input"]) for p in task["train"]],
+               "train_out": [np.array(p["output"]) for p in task["train"]],
+               "test_in": [np.array(p["input"]) for p in task["test"]]}
+
+    truth = truth_mod.canonicalize(present, trace=False)
+    scaffold = scaffold_mod.mine(truth, trace=False)
+    size_choice = size_choice_mod.mine(truth, scaffold, trace=False)
+    laws = laws_mod.mine(truth, scaffold, size_choice, trace=False)
 
     C_atoms_list = laws["train_out_C_atoms"]
 
@@ -258,8 +260,6 @@ def test_task_46f33fce():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
-
     print("=" * 60)
     print("M4 Golden Checkpoint Tests (C-atoms: component counts)")
     print("=" * 60)

@@ -116,17 +116,19 @@ def compute_A_atoms(
     midcol_flag = (d_left == d_right)
 
     # ========== 4.1 Mod classes: exact m set ==========
-    # Spec §5.1 A: m ∈ {2,…,min(6, max(H,W))} ∪ divisors(H) ∪ divisors(W)
+    # CRITICAL: Compute EXACT grid-aware mod set from spec, do NOT hand-pick subset
+    # Spec §5.1 A line 163: m ∈ {2,...,min(6, max(H,W))} ∪ divisors(H) ∪ divisors(W)
+    # This set is used in type keyer T(p) — must match spec exactly for correct mining
     max_dim = max(H, W)
-    base_ms = list(range(2, min(6, max_dim) + 1))
+    base_ms = list(range(2, min(6, max_dim) + 1))  # {2,...,min(6,max(H,W))}
 
     div_H = _divisors(H)
     div_W = _divisors(W)
 
-    m_set = set(base_ms)
-    m_set.update(div_H.tolist())
-    m_set.update(div_W.tolist())
-    m_set = {m for m in m_set if m >= 2}  # filter out mod 1 (useless)
+    m_set = set(base_ms)           # Start with {2,...,min(6,max(H,W))}
+    m_set.update(div_H.tolist())   # ∪ divisors(H)
+    m_set.update(div_W.tolist())   # ∪ divisors(W)
+    m_set = {m for m in m_set if m >= 2}  # filter out mod 1 (trivial)
 
     mod_r = {}
     mod_c = {}
@@ -1351,3 +1353,177 @@ def trace_G_atoms(G_atoms: Dict[str, Any], grid: np.ndarray) -> None:
     unique_tids = np.unique(G_atoms["template_id"])
     unique_tids = unique_tids[unique_tids >= 0]  # Filter out background
     print(f"[G-atoms] unique template_id values: {unique_tids.tolist()}")
+
+
+# ============================================================================
+# Type Keys: T(p) per cell (WO-5.1)
+# ============================================================================
+
+
+def compute_type_keys_for_grid(
+    A_atoms: Dict[str, Any],
+    B_atoms: Dict[str, Any],
+    D_atoms: Dict[str, Any],
+    G_atoms: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Compute type key T(p) for each cell as a deterministic tuple of atoms.
+
+    Anchors:
+      - 00_MATH_SPEC.md §5.2: Type keyer
+        "T(p) = (d_top, d_bottom, d_left, d_right, r±c, {r mod m}, {c mod m},
+        3×3 hash, period flags, component shape ID)"
+      - 01_STAGES.md: Stage 05_laws
+      - IMPLEMENTATION_PLAN.md WO-5.1
+
+    Type keys are used to:
+      - Group "same-role" cells across grids
+      - Mine unary fixes and relational equalities
+
+    This function only DEFINES and COMPUTES T(p) and assigns stable integer IDs.
+    Mining comes in later WOs (5.2, 5.3).
+
+    Input:
+      A_atoms: from compute_A_atoms, containing:
+        - d_top, d_bottom, d_left, d_right: (H,W) int
+        - r_plus_c, r_minus_c: (H,W) int
+        - mod_r, mod_c: dict[int -> (H,W) int]
+      B_atoms: from compute_B_atoms, containing:
+        - hash_3x3: (H,W) int
+      D_atoms: from compute_D_atoms, containing:
+        - row_periods: (H,) int
+        - col_periods: (W,) int
+      G_atoms: from compute_G_atoms, containing:
+        - template_id: (H,W) int (-1 for background)
+
+    Output:
+      {
+        "type_tuple": np.ndarray[(H,W), object],  # Python tuples per cell
+        "type_id": np.ndarray[(H,W), int],        # stable IDs 0..(K-1)
+        "types": List[Tuple],                     # unique type tuples in sorted order
+      }
+
+    Raises:
+      ValueError: if required fields missing
+    """
+    # Validate inputs
+    if "d_top" not in A_atoms:
+        raise ValueError("A_atoms missing required field 'd_top'")
+    if "hash_3x3" not in B_atoms:
+        raise ValueError("B_atoms missing required field 'hash_3x3'")
+    if "row_periods" not in D_atoms:
+        raise ValueError("D_atoms missing required field 'row_periods'")
+    if "template_id" not in G_atoms:
+        raise ValueError("G_atoms missing required field 'template_id'")
+
+    H, W = A_atoms["d_top"].shape
+
+    # Extract atom arrays
+    d_top = A_atoms["d_top"]
+    d_bottom = A_atoms["d_bottom"]
+    d_left = A_atoms["d_left"]
+    d_right = A_atoms["d_right"]
+    r_plus_c = A_atoms["r_plus_c"]
+    r_minus_c = A_atoms["r_minus_c"]
+    mod_r = A_atoms["mod_r"]
+    mod_c = A_atoms["mod_c"]
+
+    hash_3x3 = B_atoms["hash_3x3"]
+
+    row_periods = D_atoms["row_periods"]
+    col_periods = D_atoms["col_periods"]
+
+    template_id = G_atoms["template_id"]
+
+    # Get sorted mod class set (grid-aware, deterministic)
+    # CRITICAL: Use ALL m from A-atoms, do NOT subset
+    # Spec §5.1 A line 163: m ∈ {2,...,min(6,max(H,W))} ∪ divisors(H) ∪ divisors(W)
+    ms = sorted(mod_r.keys())
+
+    # Build type tuple for each cell
+    # CRITICAL: Include ALL 12 fields from spec §5.2 line 205, do NOT hand-pick
+    type_tuple = np.empty((H, W), dtype=object)
+
+    for r in range(H):
+        for c in range(W):
+            # 1. Distances (4 ints) — §5.1 A via Stage F
+            dt = int(d_top[r, c])
+            db = int(d_bottom[r, c])
+            dl = int(d_left[r, c])
+            dr = int(d_right[r, c])
+
+            # 2. Diagonal coords (2 ints) — §5.1 A
+            rp = int(r_plus_c[r, c])
+            rm = int(r_minus_c[r, c])
+
+            # 3. Mod classes (2 tuples) — §5.1 A
+            # Both mod_r AND mod_c required (independent residue classes)
+            mod_r_vals = tuple(int(mod_r[m][r, c]) for m in ms)
+            mod_c_vals = tuple(int(mod_c[m][r, c]) for m in ms)
+
+            # 4. 3×3 hash (1 int) — §5.1 B
+            h3 = int(hash_3x3[r, c])
+
+            # 5. Period flags (2 ints) — §5.1 D
+            row_p = int(row_periods[r])
+            col_p = int(col_periods[c])
+
+            # 6. Component shape ID (1 int, -1 OK for background) — §5.1 G
+            shape_id = int(template_id[r, c])
+
+            # Assemble type tuple — EXACT ORDER from spec §5.2 line 205
+            # T(p) = (d_top, d_bottom, d_left, d_right, r±c, {r mod m}, {c mod m},
+            #         3×3 hash, period flags, component shape ID)
+            T_p = (
+                dt, db, dl, dr,           # Distances
+                rp, rm,                   # Diagonal coords
+                mod_r_vals, mod_c_vals,   # Mod classes (BOTH tuples)
+                h3,                       # Hash
+                row_p, col_p,             # Periods
+                shape_id,                 # Template ID
+            )
+
+            type_tuple[r, c] = T_p
+
+    # Compute stable type IDs via lexicographic sort
+    # 1. Collect unique types
+    flat = type_tuple.ravel().tolist()
+    unique_types = sorted(set(flat))  # Lexicographic sort (deterministic)
+
+    # 2. Build mapping
+    type_to_id = {t: i for i, t in enumerate(unique_types)}
+
+    # 3. Build type_id array
+    type_id = np.zeros((H, W), dtype=int)
+    for r in range(H):
+        for c in range(W):
+            type_id[r, c] = type_to_id[type_tuple[r, c]]
+
+    return {
+        "type_tuple": type_tuple,
+        "type_id": type_id,
+        "types": unique_types,
+    }
+
+
+def trace_type_keys(type_keys: Dict[str, Any]) -> None:
+    """
+    Trace type keys for debugging.
+
+    Shows:
+      - Number of unique types
+      - First 5 type tuples
+      - Histogram of type_id usage
+    """
+    type_id = type_keys["type_id"]
+    types = type_keys["types"]
+
+    print(f"[T] num_types: {len(types)}")
+
+    # Show first 5 type tuples
+    for i, t in enumerate(types[:5]):
+        print(f"[T] type {i}: {t}")
+
+    # Histogram of type usage
+    unique, counts = np.unique(type_id, return_counts=True)
+    print(f"[T] type_id histogram (first 10): {list(zip(unique[:10].tolist(), counts[:10].tolist()))}")
