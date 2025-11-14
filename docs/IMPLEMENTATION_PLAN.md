@@ -116,12 +116,12 @@ arc_cognition/
 
 **Goal:** output‑intrinsic scaffold: frame + distance atlas + inner.
 
-### WO‑2.1 Frame detector (80–120 LOC)
+### WO‑2.1 Frame detector (80–120 LOC) ✅ COMPLETED
 
 * Frame mask = positions with identical color across **all** train_out.
   **Acceptance:** non‑empty on border‑frame tasks; count printed.
 
-### WO‑2.2 Distance atlas via BFS (120–160 LOC)
+### WO‑2.2 Distance atlas via BFS (120–160 LOC) ✅ COMPLETED
 
 * If frame exists: **multi‑source BFS** from frame cells; else from **outer border**.
 * Distances: `d_top, d_bottom, d_left, d_right` (integers).
