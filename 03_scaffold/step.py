@@ -5,209 +5,114 @@ Stage: scaffold
 Computes frame, distance fields, inner region, and global structural facts.
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 import logging
 
 import numpy as np
 
 
-def _detect_frame(
-    train_out: List[np.ndarray], trace: bool = False
-) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+def _frame_for_output(Y: np.ndarray) -> np.ndarray:
     """
-    Detect frame mask: positions with identical color across all train_out.
+    Per-grid frame: the outer border of the canonical output grid.
 
-    Anchor:
-      - 00_MATH_SPEC.md §4.1: F = {p : exists k, c_out^(i)(p)=k for all i}
+    Stage F is output-intrinsic (per grid), not global across train_out.
+    The border frame is purely geometric and later atoms/distance fields
+    will use it. Law-level invariants like "all border cells are 8" are
+    discovered in Stage N, not baked here.
 
-    Args:
-      train_out: list of canonical train_out grids (np.ndarray)
-      trace: enable logging if True
+    Anchors:
+      - 00_MATH_SPEC.md §4.1: Frame (per-grid border)
+      - 00_MATH_SPEC.md §4.2: For each output grid, build adjacency and distances
+      - 01_STAGES.md: scaffold = geometry on train_out
+      - 02_QUANTUM_MAPPING.md: WHERE vs WHAT separation
 
-    Returns:
-      frame_mask: bool array (H×W), True where all train_out have same color
-      shapes: list of (H,W) tuples per train_out grid
+    Input:
+      Y: canonical output grid (H×W np.ndarray)
+
+    Output:
+      frame: H×W boolean array, True at outer border positions
     """
-    shapes = [g.shape for g in train_out]
-    unique_shapes = sorted(set(shapes))
+    H, W = Y.shape
+    frame = np.zeros((H, W), dtype=bool)
 
-    if len(unique_shapes) != 1:
-        # No common positions if train_out shapes differ
-        if trace:
-            logging.warning(
-                f"[scaffold] train_out shapes differ: {unique_shapes}; "
-                "global frame_mask set to all False (no common positions)."
-            )
-        # Use first shape as reference
-        H, W = shapes[0]
-        return np.zeros((H, W), dtype=bool), shapes
+    if H == 0 or W == 0:
+        return frame
 
-    H, W = unique_shapes[0]
-    # Stack into 3D array: T × H × W
-    stack = np.stack(train_out, axis=0)  # shape: (T, H, W)
+    # Mark outer border: top/bottom rows and left/right columns
+    frame[0, :] = True       # top row
+    frame[H - 1, :] = True   # bottom row
+    frame[:, 0] = True       # left column
+    frame[:, W - 1] = True   # right column
 
-    # Check if all entries equal at each (r,c) position
-    base = stack[0]
-    equal_all = np.all(stack == base, axis=0)  # H×W bool array
-
-    frame_mask = equal_all.astype(bool)
-
-    return frame_mask, shapes
-
-
-def _distance_fields(
-    frame_mask: np.ndarray, has_frame: bool
-) -> Dict[str, np.ndarray]:
-    """
-    Compute directional distance fields to frame or border.
-
-    Anchor:
-      - 00_MATH_SPEC.md §4.2: Distance fields d_top, d_bottom, d_left, d_right
-
-    Args:
-      frame_mask: bool array (H×W), True at frame positions
-      has_frame: whether any frame exists
-
-    Returns:
-      dict with keys "d_top", "d_bottom", "d_left", "d_right", each np.ndarray[int] (H×W)
-    """
-    H, W = frame_mask.shape
-
-    d_top = np.zeros((H, W), dtype=int)
-    d_bottom = np.zeros((H, W), dtype=int)
-    d_left = np.zeros((H, W), dtype=int)
-    d_right = np.zeros((H, W), dtype=int)
-
-    if not has_frame:
-        # Distances to borders only (simple formulas)
-        for r in range(H):
-            for c in range(W):
-                d_top[r, c] = r
-                d_bottom[r, c] = H - 1 - r
-                d_left[r, c] = c
-                d_right[r, c] = W - 1 - c
-        return {
-            "d_top": d_top,
-            "d_bottom": d_bottom,
-            "d_left": d_left,
-            "d_right": d_right,
-        }
-
-    # With frame: directional scans with reset at frame cells
-
-    # Top-down: d_top
-    for c in range(W):
-        dist = 0
-        for r in range(H):
-            if frame_mask[r, c]:
-                dist = 0
-            elif r == 0:
-                dist = 0  # border
-            else:
-                dist += 1
-            d_top[r, c] = dist
-
-    # Bottom-up: d_bottom
-    for c in range(W):
-        dist = 0
-        for r in reversed(range(H)):
-            if frame_mask[r, c]:
-                dist = 0
-            elif r == H - 1:
-                dist = 0  # border
-            else:
-                dist += 1
-            d_bottom[r, c] = dist
-
-    # Left-right: d_left
-    for r in range(H):
-        dist = 0
-        for c in range(W):
-            if frame_mask[r, c]:
-                dist = 0
-            elif c == 0:
-                dist = 0  # border
-            else:
-                dist += 1
-            d_left[r, c] = dist
-
-    # Right-left: d_right
-    for r in range(H):
-        dist = 0
-        for c in reversed(range(W)):
-            if frame_mask[r, c]:
-                dist = 0
-            elif c == W - 1:
-                dist = 0  # border
-            else:
-                dist += 1
-            d_right[r, c] = dist
-
-    return {
-        "d_top": d_top,
-        "d_bottom": d_bottom,
-        "d_left": d_left,
-        "d_right": d_right,
-    }
+    return frame
 
 
 def build(canonical: Dict[str, Any], trace: bool = False) -> Dict[str, Any]:
     """
-    Stage: scaffold (WHERE) — frame + distances (WO-2.1 + WO-2.2)
+    Stage: scaffold (WHERE) — WO-2.1 Frame detector (per-output, border-based)
 
-    Anchor:
+    Anchors:
+      - 00_MATH_SPEC.md §4: Stage F — Frame & distances (per-grid scaffold geometry)
       - 01_STAGES.md: scaffold
-      - 00_MATH_SPEC.md §4.1-4.2: Frame & distance fields
-      - 02_QUANTUM_MAPPING.md: WHERE = output-intrinsic geometry
+      - 02_QUANTUM_MAPPING.md: WHERE = output-intrinsic scaffold
 
     Input:
-      canonical: dict from 02_truth.canonicalize with canonical train_out grids
+      canonical: object from 02_truth.canonicalize, containing:
+        - train_out: List[np.ndarray] (canonical output grids)
+        - other fields (not used in WO-2.1)
       trace: enable debug logging if True
 
     Output:
-      scaffold: dict containing:
-        - frame_mask: np.ndarray[bool] (H×W), True where all train_out identical
-        - train_out_shapes: List[(H,W)], shapes of each train_out grid
-        - has_frame: bool, True if any position has identical color across all train_out
-        - d_top: np.ndarray[int] (H×W), distance to frame/border upward
-        - d_bottom: np.ndarray[int] (H×W), distance to frame/border downward
-        - d_left: np.ndarray[int] (H×W), distance to frame/border leftward
-        - d_right: np.ndarray[int] (H×W), distance to frame/border rightward
+      scaffold: {
+        "per_output": [
+          {
+            "index": i,
+            "shape": (H_i, W_i),
+            "frame_mask": H_i×W_i bool (outer border),
+          },
+          ...
+        ]
+      }
 
-      Note: Inner region and global facts will be added in WO-2.3.
+    WO-2.1 only creates per-grid border frames.
+    WO-2.2 will add distance fields.
+    WO-2.3 will add inner region, parity flags, thickness, periods, and aggregated hints.
     """
     if trace:
-        logging.info("[scaffold] building output-intrinsic scaffold")
+        logging.info("[scaffold] build() called (WO-2.1: per-output frame detector)")
 
-    train_out = canonical["train_out"]  # List[np.ndarray] in canonical coords
+    train_out: List[np.ndarray] = canonical["train_out"]
 
-    # WO-2.1: Detect frame mask
-    frame_mask, shapes = _detect_frame(train_out, trace=trace)
-    has_frame = bool(frame_mask.any())
+    if not train_out:
+        msg = "[scaffold] No train_out grids; scaffold undefined."
+        if trace:
+            logging.error(msg)
+        raise ValueError(msg)
 
-    # WO-2.2: Compute distance fields
-    distances = _distance_fields(frame_mask, has_frame)
+    # Build per-output scaffold entries (WO-2.1: only frame_mask)
+    per_output: List[Dict[str, Any]] = []
 
-    scaffold = {
-        "frame_mask": frame_mask,
-        "train_out_shapes": shapes,
-        "has_frame": has_frame,
-        "d_top": distances["d_top"],
-        "d_bottom": distances["d_bottom"],
-        "d_left": distances["d_left"],
-        "d_right": distances["d_right"],
-    }
+    for i, Y in enumerate(train_out):
+        H, W = Y.shape
+        frame_mask = _frame_for_output(Y)
 
-    if trace:
-        logging.info(
-            f"[scaffold] frame_mask shape={frame_mask.shape}, "
-            f"sum={int(frame_mask.sum())}, has_frame={has_frame}"
-        )
-        for name in ["d_top", "d_bottom", "d_left", "d_right"]:
-            D = distances[name]
+        entry = {
+            "index": i,
+            "shape": (H, W),
+            "frame_mask": frame_mask,
+        }
+
+        if trace:
+            frame_sum = int(frame_mask.sum())
             logging.info(
-                f"[scaffold] {name}: shape={D.shape}, min={int(D.min())}, "
-                f"max={int(D.max())}, sum={int(D.sum())}"
+                f"[scaffold] output#{i}: shape={entry['shape']}, "
+                f"frame_sum={frame_sum}"
             )
+
+        per_output.append(entry)
+
+    scaffold: Dict[str, Any] = {
+        "per_output": per_output,
+    }
 
     return scaffold

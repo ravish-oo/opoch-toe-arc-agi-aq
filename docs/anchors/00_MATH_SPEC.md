@@ -113,30 +113,32 @@ Policy:
 
 ---
 
-## 4. Stage F — Frame & distances (global relational coordinates)
+## 4. Stage F — Frame & distances (per-grid scaffold geometry)
 
-Define output‑intrinsic scaffold.
+Define output‑intrinsic scaffold per grid. Because Stage A operates on disjoint canonical coordinates (one component per grid), scaffold features are **purely geometric and computed per-grid**.
 
-### 4.1 Frame from training outputs
+### 4.1 Frame (per-grid border)
 
-In canonical coords, the **frame set** is:
+For each grid (X) with shape ((H_X, W_X)), define its **frame** (F_X) as the outer border:
 [
-F = \bigl\{ p \;\big|\; \exists\, k\;\text{s.t.}\; c^{(i)}_{\text{out}}(p) = k\;\;\forall\, i \bigr\}.
+F_X = \bigl\{ (r,c) \,:\, r{=}0 \,\lor\, r{=}H_X{-}1 \,\lor\, c{=}0 \,\lor\, c{=}W_X{-}1 \bigr\}.
 ]
-(Positions with the same color across all train_out.)
 
-### 4.2 Distance fields
+**Note:** Cross-grid color patterns (e.g., "all border cells are always color 8 across train_out") are **not** scaffold features. They are invariants (laws) mined in Stage N using geometric atoms from Stage F. The frame is purely positional geometry, independent of color.
 
-For each output grid (train_out and the test canvas size once fixed):
+### 4.2 Distance fields (per-grid)
 
-* Build 4‑adjacency graph on cells.
-* **BFS source set:**
-  * If (F \neq \varnothing): multi‑source BFS from all cells in (F).
-  * Else: multi‑source BFS from the **outer border** (all cells (r{=}0), (r{=}H{-}1), (c{=}0), (c{=}W{-}1)).
-* Compute distances: (d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}}) (integers, 4‑adjacency).
-* **Inner region:** (S = \bigl\{ p \,:\, d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}} > 0 \bigr\}).
+For each grid (X) in train_out (and later for test_out with chosen size):
 
-**Receipt F:** Frame mask (F); ((d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}})) checksum; inner mask (S).
+* Compute directional distances (d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}}) from the frame (F_X).
+* **Distance semantics:** For each cell ((r,c)):
+  * (d_{\text{top}}(r,c)) = distance to nearest frame cell above or at same row.
+  * (d_{\text{bottom}}(r,c)) = distance to nearest frame cell below or at same row.
+  * (d_{\text{left}}(r,c)) = distance to nearest frame cell left or at same column.
+  * (d_{\text{right}}(r,c)) = distance to nearest frame cell right or at same column.
+* **Inner region:** (S_X = \bigl\{ (r,c) \,:\, d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}} > 0 \bigr\}).
+
+**Receipt F (per-output):** For each train_out grid: frame mask (F_X); distance fields ((d_{\text{top}}, d_{\text{bottom}}, d_{\text{left}}, d_{\text{right}})); inner mask (S_X); parity flags (has_midrow, has_midcol); thickness candidates; period hints. **Aggregated:** global hints for S0 (thickness_min, common periods).
 
 ---
 

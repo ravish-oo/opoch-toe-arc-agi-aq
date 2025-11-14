@@ -112,26 +112,23 @@ arc_cognition/
 
 ---
 
-## Milestone 2 — scaffold (WHERE) on train_out (≤350 LOC)
+Yep, let’s rewrite Milestone 2 at the new “correct” level.
 
-**Goal:** output‑intrinsic scaffold: frame + distance atlas + inner.
+## Milestone 2 — scaffold (WHERE) on train_out
 
-### WO‑2.1 Frame detector (80–120 LOC) ✅ COMPLETED
+**Goal:** Build the output-intrinsic scaffold for each training output grid: frame (canvas border), distance atlas, and inner region, plus simple global hints for S0.
 
-* Frame mask = positions with identical color across **all** train_out.
-  **Acceptance:** non‑empty on border‑frame tasks; count printed.
+### WO-2.1 Frame detector (per-output, border-based)
 
-### WO‑2.2 Distance atlas via BFS (120–160 LOC) ✅ COMPLETED
+For each canonical `train_out[i]`, compute a **frame_maskᵢ** that marks the **outer border** of that grid (top/bottom rows and left/right columns). Store these as `scaffold["per_output"][i]["frame_mask"]` along with each grid’s `(Hᵢ,Wᵢ)`.
 
-* If frame exists: **multi‑source BFS** from frame cells; else from **outer border**.
-* Distances: `d_top, d_bottom, d_left, d_right` (integers).
-  **Acceptance:** min=0 at sources; monotone inward; small checksum.
+### WO-2.2 Distance atlas via BFS / directional scan (per-output)
 
-### WO‑2.3 Inner region & global facts (80–120 LOC)
+For each `train_out[i]`, build 4-adjacency on its cells and compute directional distance fields `d_topᵢ, d_bottomᵢ, d_leftᵢ, d_rightᵢ` from its own frame_maskᵢ (or border if needed). Attach these fields under `scaffold["per_output"][i]`; verify `min=0` and monotone behavior along rows/cols.
 
-* `inner = (d_top>0)&(d_bottom>0)&(d_left>0)&(d_right>0)`.
-* Record parity flags (has midrow/midcol), learned **thickness** candidates (min ring width), simple period divisibility hints derived from train_out (no input peeking).
-  **Acceptance:** inner mask OK; facts JSON logged when `trace=True`.
+### WO-2.3 Inner region & global facts (per-output + aggregated)
+
+For each `train_out[i]`, define `innerᵢ = (d_topᵢ>0)&(d_bottomᵢ>0)&(d_leftᵢ>0)&(d_rightᵢ>0)`, and compute local parity flags (`has_midrowᵢ/has_midcolᵢ`), thickness candidates (min ring width from inner to frame), and simple row/col period hints inside `innerᵢ`. Then combine these into `scaffold["aggregated"]` (global thickness_min, row_period, col_period, has_midrow_all, has_midcol_all) to be used later by S0.
 
 ---
 
