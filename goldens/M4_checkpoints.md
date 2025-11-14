@@ -248,3 +248,123 @@ This gives your reviewer/tester:
 * A periodic 2D tiling case that exercises pixel counting and period detection.
 
 And all numbers I listed above are fully determined by the spec and robust against canonicalization, so they’re safe to use as goldens.
+
+#### 74dd1130
+{
+  "task_id": "74dd1130",
+  "atoms_summary": {
+    "train_out": [
+      {
+        "index": 0,
+        "pixel_counts": {
+          "5": 4,
+          "9": 3,
+          "8": 2
+        },
+        "component_counts_nonzero": {
+          "5": 2,
+          "8": 2,
+          "9": 2
+        },
+        "row_period_hist": {
+          "3": 3
+        },
+        "col_period_hist": {
+          "3": 3
+        }
+      },
+      {
+        "index": 1,
+        "pixel_counts": {
+          "2": 4,
+          "5": 4,
+          "6": 1
+        },
+        "component_counts_nonzero": {
+          "2": 1,
+          "5": 2,
+          "6": 1
+        },
+        "row_period_hist": {
+          "3": 2,
+          "2": 1
+        },
+        "col_period_hist": {
+          "3": 2,
+          "1": 1
+        }
+      },
+      {
+        "index": 2,
+        "pixel_counts": {
+          "2": 4,
+          "6": 3,
+          "1": 2
+        },
+        "component_counts_nonzero": {
+          "1": 1,
+          "2": 2,
+          "6": 2
+        },
+        "row_period_hist": {
+          "1": 1,
+          "2": 1,
+          "3": 1
+        },
+        "col_period_hist": {
+          "3": 2,
+          "2": 1
+        }
+      },
+      {
+        "index": 3,
+        "pixel_counts": {
+          "2": 4,
+          "1": 3,
+          "5": 2
+        },
+        "component_counts_nonzero": {
+          "1": 2,
+          "2": 2,
+          "5": 2
+        },
+        "row_period_hist": {
+          "3": 2,
+          "2": 1
+        },
+        "col_period_hist": {
+          "3": 2,
+          "2": 1
+        }
+      }
+    ]
+  }
+}
+How your tester should compute and compare
+
+For each train_out[i]:
+
+pixel_counts
+
+Count occurrences of each color in the 3×3 grid.
+
+Store as {color → count}.
+
+component_counts_nonzero
+
+For each color k > 0, run N4-connected-component labeling.
+
+Count how many connected components of that color exist.
+
+Store as {color → component_count}.
+
+row_period_hist
+
+For each row (length 3), find minimal p ∈ {1,2,3} such that
+row[j] == row[j % p] for all j.
+
+Build a histogram {p → number_of_rows_with_period_p}.
+
+col_period_hist
+
+Same as above but per column.

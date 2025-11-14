@@ -1,19 +1,17 @@
 """
-05_laws/atoms.py — A-atoms: Coordinates & distances (WO-4.1)
+05_laws/atoms.py — Atom derivations for laws
 
 Anchor:
-  - 00_MATH_SPEC.md §5.1: Atom universe (A. Scaffold & coords)
+  - 00_MATH_SPEC.md §5.1: Atom universe
 
 Implements:
-  - Basic coords (H,W,r,c,r±c)
-  - Distance fields (reused from scaffold)
-  - Midrow/midcol flags
-  - Grid-aware mod classes
-  - Grid-aware block coords
+  - WO-4.1: A-atoms (coordinates & distances)
+  - WO-4.2: B-atoms (local texture)
 """
 
 import numpy as np
 from typing import Dict, Any, Optional
+from scipy import ndimage
 
 
 def _divisors(n: int) -> np.ndarray:
@@ -192,3 +190,188 @@ def trace_A_atoms(A_atoms: Dict[str, Any]) -> None:
     print(f"[A-atoms] midcol_flag cells: {A_atoms['midcol_flag'].sum()}")
     print(f"[A-atoms] mod m keys: {sorted(A_atoms['mod_r'].keys())}")
     print(f"[A-atoms] block b keys: {sorted(A_atoms['block_row'].keys())}")
+
+
+# ========== WO-4.2: B-atoms (Local Texture) ==========
+
+
+def compute_B_atoms(grid: np.ndarray) -> Dict[str, Any]:
+    """
+    Compute B-atoms (local texture) for a single output grid.
+
+    Anchor:
+      - 00_MATH_SPEC.md §5.1 B: Local texture
+
+    Input:
+      grid: np.ndarray[(H,W)] with colors 0..9 in canonical coords
+
+    Output:
+      Dict containing:
+        - n4_counts: Dict[int, np.ndarray[(H,W), int]] - N4 neighbor counts per color
+        - n8_counts: Dict[int, np.ndarray[(H,W), int]] - N8 neighbor counts per color
+        - hash_3x3: np.ndarray[(H,W), int] - base-11 encoding of 3×3 neighborhood
+        - ring_5x5: np.ndarray[(H,W), int] - base-11 encoding of 5×5 perimeter
+        - row_span_len/start/end: np.ndarray[(H,W), int] - run-lengths along rows
+        - col_span_len/start/end: np.ndarray[(H,W), int] - run-lengths along columns
+    """
+    H, W = grid.shape
+
+    # ========== 3.1 N4 / N8 neighbor counts per color ==========
+    # Grid-aware: only compute for colors present in this grid
+    colors = np.unique(grid)
+
+    # Define convolution kernels
+    kernel_n4 = np.array([[0, 1, 0],
+                          [1, 0, 1],
+                          [0, 1, 0]], dtype=int)
+
+    kernel_n8 = np.array([[1, 1, 1],
+                          [1, 0, 1],
+                          [1, 1, 1]], dtype=int)
+
+    n4_counts = {}
+    n8_counts = {}
+
+    for k in colors:
+        mask_k = (grid == k).astype(int)
+        n4_counts[int(k)] = ndimage.convolve(mask_k, kernel_n4, mode="constant", cval=0)
+        n8_counts[int(k)] = ndimage.convolve(mask_k, kernel_n8, mode="constant", cval=0)
+
+    # ========== 3.2 3×3 full hash (base-11, sentinel=10) ==========
+    SENT = 10
+
+    # Pad grid with sentinel
+    padded = np.pad(grid, pad_width=1, mode="constant", constant_values=SENT)
+
+    # 9 positions in row-major order relative to center
+    offsets_3x3 = [
+        (-1, -1), (-1, 0), (-1, 1),
+        (0, -1), (0, 0), (0, 1),
+        (1, -1), (1, 0), (1, 1)
+    ]
+
+    # Collect shifted views
+    windows_3x3 = []
+    for dr, dc in offsets_3x3:
+        r0 = 1 + dr
+        r1 = r0 + H
+        c0 = 1 + dc
+        c1 = c0 + W
+        windows_3x3.append(padded[r0:r1, c0:c1])
+
+    # Encode in base-11
+    hash_3x3 = np.zeros((H, W), dtype=int)
+    for w in windows_3x3:
+        hash_3x3 = hash_3x3 * 11 + w
+
+    # ========== 3.3 5×5 ring signature (perimeter only, sentinel=10) ==========
+    # Pad grid with sentinel=10, pad 2 in each direction
+    padded5 = np.pad(grid, pad_width=2, mode="constant", constant_values=SENT)
+
+    # 16 perimeter positions of 5×5 window in fixed order:
+    # Top row (5), Right col (3), Bottom row (5), Left col (3)
+    offsets_ring = [
+        # Top row
+        (-2, -2), (-2, -1), (-2, 0), (-2, 1), (-2, 2),
+        # Right col (excluding corners)
+        (-1, 2), (0, 2), (1, 2),
+        # Bottom row
+        (2, 2), (2, 1), (2, 0), (2, -1), (2, -2),
+        # Left col (excluding corners)
+        (1, -2), (0, -2), (-1, -2),
+    ]
+
+    # Collect shifted views for ring
+    ring_5x5 = np.zeros((H, W), dtype=int)
+    for dr, dc in offsets_ring:
+        r0 = 2 + dr
+        r1 = r0 + H
+        c0 = 2 + dc
+        c1 = c0 + W
+        patch = padded5[r0:r1, c0:c1]
+        ring_5x5 = ring_5x5 * 11 + patch
+
+    # ========== 3.4 Row / col run-lengths through each cell ==========
+    # Row run-lengths
+    row_span_len = np.zeros((H, W), dtype=int)
+    row_span_start = np.zeros((H, W), dtype=int)
+    row_span_end = np.zeros((H, W), dtype=int)
+
+    for r in range(H):
+        row_vals = grid[r, :]  # shape (W,)
+        c = 0
+        while c < W:
+            k = row_vals[c]
+            # Find end of this same-color run
+            c2 = c + 1
+            while c2 < W and row_vals[c2] == k:
+                c2 += 1
+            # Span is [c, c2)
+            span_start = c
+            span_end = c2 - 1
+            span_len = span_end - span_start + 1
+            row_span_start[r, span_start:span_end + 1] = span_start
+            row_span_end[r, span_start:span_end + 1] = span_end
+            row_span_len[r, span_start:span_end + 1] = span_len
+            c = c2
+
+    # Column run-lengths
+    col_span_len = np.zeros((H, W), dtype=int)
+    col_span_start = np.zeros((H, W), dtype=int)
+    col_span_end = np.zeros((H, W), dtype=int)
+
+    for c in range(W):
+        col_vals = grid[:, c]  # shape (H,)
+        r = 0
+        while r < H:
+            k = col_vals[r]
+            # Find end of this same-color run
+            r2 = r + 1
+            while r2 < H and col_vals[r2] == k:
+                r2 += 1
+            # Span is [r, r2)
+            span_start = r
+            span_end = r2 - 1
+            span_len = span_end - span_start + 1
+            col_span_start[span_start:span_end + 1, c] = span_start
+            col_span_end[span_start:span_end + 1, c] = span_end
+            col_span_len[span_start:span_end + 1, c] = span_len
+            r = r2
+
+    # ========== Return B-atoms dict ==========
+    return {
+        "n4_counts": n4_counts,
+        "n8_counts": n8_counts,
+        "hash_3x3": hash_3x3,
+        "ring_5x5": ring_5x5,
+        "row_span_len": row_span_len,
+        "row_span_start": row_span_start,
+        "row_span_end": row_span_end,
+        "col_span_len": col_span_len,
+        "col_span_start": col_span_start,
+        "col_span_end": col_span_end,
+    }
+
+
+def trace_B_atoms(B_atoms: Dict[str, Any], grid: np.ndarray) -> None:
+    """
+    Print trace summary of B-atoms for debugging.
+
+    Called from 05_laws/step.py when trace=True.
+    """
+    H, W = grid.shape
+    colors = np.unique(grid)
+
+    print(f"[B-atoms] H,W = {H},{W}")
+    print(f"[B-atoms] colors present: {colors.tolist()}")
+
+    # Show one example color for neighbor counts
+    if len(colors) > 0:
+        example_k = int(colors[0])
+        print(f"[B-atoms] n4_counts[{example_k}] sum = {B_atoms['n4_counts'][example_k].sum()}")
+        print(f"[B-atoms] n8_counts[{example_k}] sum = {B_atoms['n8_counts'][example_k].sum()}")
+
+    print(f"[B-atoms] hash_3x3 range: [{B_atoms['hash_3x3'].min()}, {B_atoms['hash_3x3'].max()}]")
+    print(f"[B-atoms] ring_5x5 range: [{B_atoms['ring_5x5'].min()}, {B_atoms['ring_5x5'].max()}]")
+    print(f"[B-atoms] row_span_len range: [{B_atoms['row_span_len'].min()}, {B_atoms['row_span_len'].max()}]")
+    print(f"[B-atoms] col_span_len range: [{B_atoms['col_span_len'].min()}, {B_atoms['col_span_len'].max()}]")

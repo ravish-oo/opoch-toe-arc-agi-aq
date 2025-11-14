@@ -59,6 +59,7 @@ You should **not** compare:
 for this particular task’s Milestone 5 golden. Those are allowed to vary as long as they remain consistent with the spec, and they will be exercised more precisely on other golden tasks where we can pin them down safely.
 
 ### More golden atoms
+#### 46f33fce
 {
   "task_id": "46f33fce",
   "atoms_summary": {
